@@ -182,37 +182,45 @@ footer { color: var(--text-muted); font-size: 12px; margin-top: 40px; }
 
   <!-- ================= C. xFG outliers ================= -->
   <h2 id="outliers">xFG outliers</h2>
-  <p class="lede"><b>Shot quality</b> = average xFG% of the shots a player takes. <b>Shot-making</b> = actual FG% minus xFG%.
-    Because the model never sees the shooter, the gap is the player's own skill (or luck). <b>z</b> = makes over expected divided by
-    the binomial standard error, so |z| &gt; 2 is unlikely to be luck alone. Click any player to load them in the shot maps.</p>
+  <p class="lede"><b>Shot quality</b> = how good a player's shots are on average; <b>shot-making</b> = how much they beat that.
+    Because the model never sees the shooter, the gap is the player's own skill (or luck).
+    <b>xFG</b> counts makes. <b>xPts</b> weights each shot by what it's worth (xPts = xFG% &times; 2 or 3), so beating
+    the model on threes counts more than on layups. <b>z</b> = over-expected total divided by what chance alone would produce
+    (1&sigma;), so |z| &gt; 2 is unlikely to be luck. Click any player to load them in the shot maps.</p>
   <div class="filters" id="boardFilters">
+    <label>Measure <span class="seg" id="bMetric" role="group">
+      <button type="button" data-metric="xfg" aria-pressed="true">xFG (makes)</button>
+      <button type="button" data-metric="xpts" aria-pressed="false">xPts (points)</button></span></label>
     <label>Scope <select id="bScope"></select></label>
     <label>Zones <select id="bZone"></select></label>
     <label>Min attempts <span style="display:flex;align-items:center;gap:8px"><input type="range" id="bMin" min="50" max="1500" step="50"><b id="bMinVal"></b></span></label>
   </div>
-  <div class="card"><div class="row"><h3>Shot-making leaderboard</h3><button class="link" id="boardMore" type="button"></button></div>
+  <div class="card"><div class="row"><h3 id="boardTitle">Shot-making leaderboard</h3><button class="link" id="boardMore" type="button"></button></div>
     <div class="tbl-wrap" id="boardTable"></div></div>
   <div class="grid g2" style="margin-top:14px">
     <div class="card"><h3>Shot quality vs shot-making</h3>
       <p class="note">Each dot is a player (size = attempts). Lines at the medians.</p>
       <div class="chart" id="quadChart" style="min-height:420px"></div></div>
     <div class="card"><h3>Luck check</h3>
-      <p class="note">Makes over expected vs volume. The shaded funnel is &plusmn;2&sigma; of pure chance at league shot quality.</p>
+      <p class="note">Every shot is a weighted coin flip (it goes in with probability xFG%), so even a shooter exactly as good as the model
+        assumes drifts above or below zero by chance. That drift grows with the square root of attempts: the shaded funnel is &plusmn;2&sigma;,
+        where a no-skill shooter lands ~95% of the time. Gray dots inside it could be luck; dots outside it probably aren't.</p>
+      <p class="note" id="luckNote"></p>
       <div class="chart" id="luckChart" style="min-height:420px"></div></div>
   </div>
   <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>Best shot diets (highest avg xFG%)</h3><div class="tbl-wrap" id="qualityTop"></div></div>
-    <div class="card"><h3>Toughest shot diets (lowest avg xFG%)</h3><div class="tbl-wrap" id="qualityBottom"></div></div>
+    <div class="card"><h3 id="qualityTopTitle">Best shot diets</h3><div class="tbl-wrap" id="qualityTop"></div></div>
+    <div class="card"><h3 id="qualityBottomTitle">Toughest shot diets</h3><div class="tbl-wrap" id="qualityBottom"></div></div>
   </div>
   <div class="grid g2" style="margin-top:14px">
-    <div class="card"><div class="row"><h3>Toughest makes</h3>
-      <label style="font-size:12.5px;color:var(--text-secondary)"><input type="checkbox" id="heaves"> include heaves</label></div>
-      <p class="note">Lowest-probability shots that went in.</p><div class="tbl-wrap" id="toughTable"></div></div>
-    <div class="card"><h3>Easiest misses</h3><p class="note">Highest-probability shots that didn't.</p><div class="tbl-wrap" id="easyTable"></div></div>
+    <div class="card"><div class="row"><h3 id="toughTitle">Toughest makes</h3>
+      <label style="font-size:12.5px;color:var(--text-secondary)"><input type="checkbox" id="heaves"> include heaves (35+ ft, or 28+ ft in the last 3 s)</label></div>
+      <p class="note" id="toughNote"></p><div class="tbl-wrap" id="toughTable"></div></div>
+    <div class="card"><h3 id="easyTitle">Easiest misses</h3><p class="note" id="easyNote"></p><div class="tbl-wrap" id="easyTable"></div></div>
   </div>
   <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>Team offense: shot-making</h3><p class="note">Makes over expected on the team's own shots.</p><div class="tbl-wrap" id="teamOff"></div></div>
-    <div class="card"><h3>Team defense: shot-making allowed</h3><p class="note">Opponents' makes over expected (negative = opponents shot worse than their shot quality).</p><div class="tbl-wrap" id="teamDef"></div></div>
+    <div class="card"><h3>Team offense: shot-making</h3><p class="note">Over expected on the team's own shots.</p><div class="tbl-wrap" id="teamOff"></div></div>
+    <div class="card"><h3>Team defense: shot-making allowed</h3><p class="note">Opponents' total over expected (negative = opponents shot worse than their shot quality). Best defenses first.</p><div class="tbl-wrap" id="teamDef"></div></div>
   </div>
 
   <footer id="footer"></footer>
@@ -267,10 +275,15 @@ function baseLayout(extra = {}) {
   }, extra);
 }
 const PCONF = { displayModeBar: false, responsive: true };
-function plot(id, traces, layout) {
+// `key`: when it changes (e.g. xFG <-> xPts), redraw from scratch -- Plotly.react keeps
+// some axis state (tick formats) across updates
+const PLOT_KEYS = {};
+function plot(id, traces, layout, key = "") {
   try {
     const el = document.getElementById(id);
     el.querySelector(".empty")?.remove();
+    if (PLOT_KEYS[id] !== undefined && PLOT_KEYS[id] !== key) Plotly.purge(id);
+    PLOT_KEYS[id] = key;
     Plotly.react(id, traces, layout, PCONF);
     CHECK.charts[id] = traces.reduce((n, t) => n + ((t.x && t.x.length) || (t.z && t.z.length) || 0), 0);
   } catch (e) { CHECK.errors.push(id + ": " + e.message); }
@@ -385,7 +398,7 @@ async function decodeShots() {
 // ---------------- state ----------------
 const LK = DATA.meta.lookups;
 const state = { season: -1, team: -1, player: -1, opp: -1, family: -1, result: "all", mode: "xfg",
-                scope: "All", zoneGroup: "All zones", minAtt: DATA.leaderboards.min_attempts_default,
+                metric: "xfg", scope: "All", zoneGroup: "All zones", minAtt: DATA.leaderboards.min_attempts_default,
                 sortKey: "makes_oe", sortDir: -1, showAll: false, heaves: false };
 const playerIndex = new Map(LK.players.map((p, i) => [p, i]));
 
@@ -652,6 +665,21 @@ function renderTraining() {
 }
 
 // ---------------- C. outliers ----------------
+// one switch drives the whole section: xFG (makes) or xPts (points = xFG x 2 or 3)
+const METRICS = {
+  xfg: { act: "fg_pct", q: "xfg_pct", oe: "fg_oe", total: "makes_oe", z: "z", sd: "sd_makes",
+         actLabel: "FG%", qLabel: "xFG%", oeLabel: "FG% − xFG%", totalLabel: "Makes over exp.",
+         fmtAct: v => pct(v), fmtOe: v => pts(v), fmtOeAxis: "+.0%", fmtQAxis: ".0%",
+         qTitle: "Shot quality (avg xFG%)", oeTitle: "Shot-making (FG% − xFG%)" },
+  xpts: { act: "pps", q: "xpps", oe: "pps_oe", total: "pts_oe", z: "z_pts", sd: "sd_pts",
+          actLabel: "Pts/shot", qLabel: "xPts/shot", oeLabel: "Pts − xPts /shot", totalLabel: "Points over exp.",
+          fmtAct: v => v == null ? "–" : v.toFixed(3), fmtOe: v => sgn(v, 3), fmtOeAxis: ".2f"  /* Plotly 2.32 ignores "+" with fixed-point formats */, fmtQAxis: ".2f",
+          qTitle: "Shot quality (expected points per shot)", oeTitle: "Shot-making (points − xPts per shot)" },
+};
+const SORT_TWIN = { fg_pct: "pps", xfg_pct: "xpps", fg_oe: "pps_oe", makes_oe: "pts_oe", z: "z_pts" };
+const SORT_TWIN_BACK = Object.fromEntries(Object.entries(SORT_TWIN).map(([k, v]) => [v, k]));
+const M_ = () => METRICS[state.metric];
+
 function boardRows() {
   const B = DATA.leaderboards.boards[state.scope];
   const teamOf = new Map(B.players.map(p => [p.PLAYER_NAME, p.team]));
@@ -668,8 +696,10 @@ function selectPlayer(name) {
   document.getElementById("maps").scrollIntoView({ behavior: "smooth" });
 }
 function renderBoards() {
-  const rows = boardRows();
+  const m = M_(), rows = boardRows();
   document.getElementById("bMinVal").textContent = int(state.minAtt);
+  document.getElementById("boardTitle").textContent = state.metric === "xfg"
+    ? "Shot-making leaderboard (makes over expected)" : "Shot-making leaderboard (points over expected)";
   const sorted = [...rows].sort((a, b) => state.sortDir * ((a[state.sortKey] ?? -1e9) - (b[state.sortKey] ?? -1e9)));
   const shown = state.showAll ? sorted : sorted.slice(0, 25);
   const more = document.getElementById("boardMore");
@@ -678,17 +708,22 @@ function renderBoards() {
   renderTable("boardTable", shown, [
     { label: "#", get: r => sorted.indexOf(r) + 1 }, { label: "Player", left: true, get: r => r.PLAYER_NAME },
     { label: "Team", left: true, get: r => r.team || "" },
-    { label: "FGA", get: r => r.attempts, fmt: int, sortKey: "attempts" }, { label: "FG%", get: r => r.fg_pct, fmt: v => pct(v), sortKey: "fg_pct" },
-    { label: "xFG%", get: r => r.xfg_pct, fmt: v => pct(v), sortKey: "xfg_pct" },
-    { label: "FG% − xFG%", get: r => r.fg_oe, fmt: v => pts(v), signed: true, sortKey: "fg_oe" },
-    { label: "Makes over exp.", get: r => r.makes_oe, fmt: v => sgn(v), signed: true, sortKey: "makes_oe" },
-    { label: "z", get: r => r.z, fmt: v => sgn(v, 1), signed: true, sortKey: "z" }],
+    { label: "FGA", get: r => r.attempts, fmt: int, sortKey: "attempts" },
+    { label: "3PA rate", get: r => r.three_rate, fmt: v => pct(v, 0), sortKey: "three_rate" },
+    { label: m.actLabel, get: r => r[m.act], fmt: m.fmtAct, sortKey: m.act },
+    { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct, sortKey: m.q },
+    { label: m.oeLabel, get: r => r[m.oe], fmt: m.fmtOe, signed: true, sortKey: m.oe },
+    { label: m.totalLabel, get: r => r[m.total], fmt: v => sgn(v), signed: true, sortKey: m.total },
+    { label: "z", get: r => r[m.z], fmt: v => sgn(v, 1), signed: true, sortKey: m.z }],
     { onSort, sortKey: state.sortKey, sortDir: state.sortDir, onRow: r => selectPlayer(r.PLAYER_NAME) });
 
   const qCols = [{ label: "Player", left: true, get: r => r.PLAYER_NAME }, { label: "Team", left: true, get: r => r.team || "" },
-    { label: "FGA", get: r => r.attempts, fmt: int }, { label: "xFG%", get: r => r.xfg_pct, fmt: v => pct(v) },
-    { label: "Avg dist", get: r => r.avg_dist, fmt: v => v == null ? "–" : v.toFixed(1) + " ft" }, { label: "FG% − xFG%", get: r => r.fg_oe, fmt: v => pts(v), signed: true }];
-  const byQ = [...rows].sort((a, b) => b.xfg_pct - a.xfg_pct);
+    { label: "FGA", get: r => r.attempts, fmt: int }, { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct },
+    { label: "Avg dist", get: r => r.avg_dist, fmt: v => v == null ? "–" : v.toFixed(1) + " ft" },
+    { label: m.oeLabel, get: r => r[m.oe], fmt: m.fmtOe, signed: true }];
+  const byQ = [...rows].sort((a, b) => b[m.q] - a[m.q]);
+  document.getElementById("qualityTopTitle").textContent = `Best shot diets (highest ${m.qLabel})`;
+  document.getElementById("qualityBottomTitle").textContent = `Toughest shot diets (lowest ${m.qLabel})`;
   renderTable("qualityTop", byQ.slice(0, 10), qCols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
   renderTable("qualityBottom", byQ.slice(-10).reverse(), qCols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
 
@@ -696,71 +731,87 @@ function renderBoards() {
   else { renderQuad(rows); renderLuck(rows); }
 
   const B = DATA.leaderboards.boards[state.scope];
-  const tCols = [{ label: "Team", left: true, get: r => r.team }, { label: "FGA", get: r => r.attempts, fmt: int },
-    { label: "FG%", get: r => r.fg_pct, fmt: v => pct(v) }, { label: "xFG%", get: r => r.xfg_pct, fmt: v => pct(v) },
-    { label: "FG% − xFG%", get: r => r.fg_oe, fmt: v => pts(v), signed: true }, { label: "Makes over exp.", get: r => r.makes_oe, fmt: v => sgn(v), signed: true }];
-  renderTable("teamOff", B.team_offense, tCols);
-  renderTable("teamDef", B.team_defense, tCols.map(c => c.signed ? { ...c, signed: false, fmt: c.fmt } : c));
+  const tCols = signed => [{ label: "Team", left: true, get: r => r.team }, { label: "FGA", get: r => r.attempts, fmt: int },
+    { label: m.actLabel, get: r => r[m.act], fmt: m.fmtAct }, { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct },
+    { label: m.oeLabel, get: r => r[m.oe], fmt: m.fmtOe, signed }, { label: m.totalLabel, get: r => r[m.total], fmt: v => sgn(v), signed },
+    { label: "z", get: r => r[m.z], fmt: v => sgn(v, 1), signed }];
+  renderTable("teamOff", [...B.team_offense].sort((a, b) => b[m.total] - a[m.total]), tCols(true));
+  renderTable("teamDef", [...B.team_defense].sort((a, b) => a[m.total] - b[m.total]), tCols(false));
 }
 const median = a => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 function renderQuad(rows) {
-  const mx = median(rows.map(r => r.xfg_pct)), my = median(rows.map(r => r.fg_oe));
-  const maxA = Math.max(...rows.map(r => r.attempts));
-  const label = new Set([...rows].sort((a, b) => b.makes_oe - a.makes_oe).slice(0, 5).map(r => r.PLAYER_NAME)
-    .concat([...rows].sort((a, b) => a.makes_oe - b.makes_oe).slice(0, 3).map(r => r.PLAYER_NAME)));
-  const t = { type: "scatter", mode: "markers", x: rows.map(r => r.xfg_pct), y: rows.map(r => r.fg_oe),
+  const m = M_();
+  const xs = rows.map(r => r[m.q]), ys = rows.map(r => r[m.oe]);
+  const mx = median(xs), my = median(ys), maxA = Math.max(...rows.map(r => r.attempts));
+  const label = new Set([...rows].sort((a, b) => b[m.total] - a[m.total]).slice(0, 5).map(r => r.PLAYER_NAME)
+    .concat([...rows].sort((a, b) => a[m.total] - b[m.total]).slice(0, 3).map(r => r.PLAYER_NAME)));
+  const t = { type: "scatter", mode: "markers", x: xs, y: ys,
     marker: { size: rows.map(r => 6 + 12 * Math.sqrt(r.attempts / maxA)), color: tok("--series-1"), opacity: 0.75, line: { width: 1.5, color: tok("--surface-1") } },
-    customdata: rows.map(r => [r.PLAYER_NAME, r.team || "", r.attempts, r.fg_pct]),
-    hovertemplate: "<b>%{customdata[0]}</b> %{customdata[1]}<br>%{customdata[2]:,} FGA<br>xFG% %{x:.1%} · FG% %{customdata[3]:.1%}<br>FG% − xFG% %{y:+.1%}<extra></extra>" };
-  const xs = rows.map(r => r.xfg_pct), ys = rows.map(r => r.fg_oe);
+    customdata: rows.map(r => [r.PLAYER_NAME, r.team || "", r.attempts, m.fmtAct(r[m.act]), m.fmtAct(r[m.q]), m.fmtOe(r[m.oe])]),
+    hovertemplate: `<b>%{customdata[0]}</b> %{customdata[1]}<br>%{customdata[2]:,} FGA<br>${m.qLabel} %{customdata[4]} · ${m.actLabel} %{customdata[3]}<br>${m.oeLabel} %{customdata[5]}<extra></extra>` };
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   const padx = (x1 - x0) * 0.08, pady = (y1 - y0) * 0.1;
-  const ann = declutter(rows.filter(r => label.has(r.PLAYER_NAME)).map(r => ({ x: r.xfg_pct, y: r.fg_oe, text: r.PLAYER_NAME, showarrow: false,
+  const ann = declutter(rows.filter(r => label.has(r.PLAYER_NAME)).map(r => ({ x: r[m.q], y: r[m.oe], text: r.PLAYER_NAME, showarrow: false,
     yshift: 12, font: { size: 10.5, color: tok("--text-primary") } })), x1 - x0, y1 - y0);
   const corner = (x, y, text, xa, ya) => ({ x, y, text, showarrow: false, xanchor: xa, yanchor: ya, font: { size: 10.5, color: tok("--text-muted") } });
   ann.push(corner(x1 + padx, y1 + pady, "easy shots, made more", "right", "top"), corner(x0 - padx, y1 + pady, "hard shots, made more", "left", "top"),
            corner(x1 + padx, y0 - pady, "easy shots, made fewer", "right", "bottom"), corner(x0 - padx, y0 - pady, "hard shots, made fewer", "left", "bottom"));
   const ml = { color: tok("--axis"), width: 1 };
-  plot("quadChart", [t], baseLayout({ height: 420, annotations: ann, margin: { l: 56, r: 14, t: 10, b: 44 },
+  plot("quadChart", [t], baseLayout({ height: 420, annotations: ann, margin: { l: 60, r: 14, t: 10, b: 44 },
     shapes: [{ type: "line", x0: mx, x1: mx, yref: "paper", y0: 0, y1: 1, line: ml }, { type: "line", y0: my, y1: my, xref: "paper", x0: 0, x1: 1, line: ml }],
-    xaxis: { ...baseLayout().xaxis, tickformat: ".0%", title: { text: "Shot quality (avg xFG%)" }, range: [x0 - padx, x1 + padx] },
-    yaxis: { ...baseLayout().yaxis, tickformat: "+.0%", title: { text: "Shot-making (FG% − xFG%)" }, range: [y0 - pady, y1 + pady] } }));
-  const quadChartEl = document.getElementById("quadChart");
-  quadChartEl.removeAllListeners?.("plotly_click");
-  quadChartEl.on?.("plotly_click", ev => selectPlayer(ev.points[0].customdata[0]));
+    xaxis: { ...baseLayout().xaxis, tickformat: m.fmtQAxis, title: { text: m.qTitle }, range: [x0 - padx, x1 + padx] },
+    yaxis: { ...baseLayout().yaxis, tickformat: m.fmtOeAxis, title: { text: m.oeTitle }, range: [y0 - pady, y1 + pady] } }), state.metric);
+  const el = document.getElementById("quadChart");
+  el.removeAllListeners?.("plotly_click");
+  el.on?.("plotly_click", ev => selectPlayer(ev.points[0].customdata[0]));
 }
 function renderLuck(rows) {
-  const p = rows.reduce((s, r) => s + r.xfg_pct * r.attempts, 0) / rows.reduce((s, r) => s + r.attempts, 0);
+  const m = M_();
+  // funnel: pooled per-shot chance variance of the players shown -> ±2σ = 2·sqrt(n·var)
+  const perShotVar = rows.reduce((s, r) => s + r[m.sd] ** 2, 0) / rows.reduce((s, r) => s + r.attempts, 0);
   const maxA = Math.max(...rows.map(r => r.attempts)) * 1.05, nx = 60;
-  const bx = Array.from({ length: nx + 1 }, (_, i) => maxA * i / nx), band = bx.map(n => 2 * Math.sqrt(n * p * (1 - p)));
-  const groups = [["Beyond +2σ (hot)", r => r.z > 2, "--hot"], ["Within ±2σ", r => Math.abs(r.z) <= 2, "--muted-mark"], ["Beyond −2σ (cold)", r => r.z < -2, "--cold"]];
+  const bx = Array.from({ length: nx + 1 }, (_, i) => maxA * i / nx), band = bx.map(n => 2 * Math.sqrt(n * perShotVar));
+  const groups = [["Beyond +2σ (hot)", r => r[m.z] > 2, "--hot"], ["Within ±2σ (could be luck)", r => Math.abs(r[m.z]) <= 2, "--muted-mark"],
+                  ["Beyond −2σ (cold)", r => r[m.z] < -2, "--cold"]];
   const traces = [
     { type: "scatter", mode: "lines", x: bx, y: band, line: { width: 0 }, hoverinfo: "skip", showlegend: false },
     { type: "scatter", mode: "lines", x: bx, y: band.map(v => -v), fill: "tonexty", fillcolor: isDark() ? "rgba(255,255,255,0.06)" : "rgba(11,11,11,0.05)",
       line: { width: 0 }, hoverinfo: "skip", showlegend: false },
     ...groups.map(([name, f, c]) => { const rs = rows.filter(f);
-      return { type: "scatter", mode: "markers", name, x: rs.map(r => r.attempts), y: rs.map(r => r.makes_oe),
+      return { type: "scatter", mode: "markers", name, x: rs.map(r => r.attempts), y: rs.map(r => r[m.total]),
         marker: { size: 8, color: tok(c), line: { width: 1.5, color: tok("--surface-1") } },
-        customdata: rs.map(r => [r.PLAYER_NAME, r.team || "", r.z]),
-        hovertemplate: "<b>%{customdata[0]}</b> %{customdata[1]}<br>%{x:,} FGA · makes over exp. %{y:+.1f}<br>z %{customdata[2]:+.1f}<extra></extra>" }; })];
-  const top = [...rows].sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 5);
-  const moe = rows.map(r => r.makes_oe);
-  const ann = declutter(top.map(r => ({ x: r.attempts, y: r.makes_oe, text: r.PLAYER_NAME, showarrow: false, yshift: r.makes_oe >= 0 ? 12 : -12,
-    font: { size: 10.5, color: tok("--text-primary") } })), maxA, Math.max(...moe) - Math.min(...moe));
-  plot("luckChart", traces, baseLayout({ height: 420, showlegend: true, annotations: ann, margin: { l: 56, r: 14, t: 30, b: 44 },
+        customdata: rs.map(r => [r.PLAYER_NAME, r.team || "", r[m.z], r[m.sd]]),
+        hovertemplate: `<b>%{customdata[0]}</b> %{customdata[1]}<br>%{x:,} FGA · ${m.totalLabel.toLowerCase()} %{y:+.1f}<br>chance alone: ±%{customdata[3]:.1f} (1σ) · z %{customdata[2]:+.1f}<extra></extra>` }; })];
+  const tot = rows.map(r => r[m.total]);
+  const top = [...rows].sort((a, b) => Math.abs(b[m.z]) - Math.abs(a[m.z])).slice(0, 5);
+  const ann = declutter(top.map(r => ({ x: r.attempts, y: r[m.total], text: r.PLAYER_NAME, showarrow: false, yshift: r[m.total] >= 0 ? 12 : -12,
+    font: { size: 10.5, color: tok("--text-primary") } })), maxA, Math.max(...tot) - Math.min(...tot));
+  const nOut = rows.filter(r => Math.abs(r[m.z]) > 2).length, expected = Math.round(rows.length * 0.0455);
+  document.getElementById("luckNote").textContent = nOut > 2 * expected
+    ? `${nOut} of ${rows.length} players sit outside ±2σ, where pure chance would put about ${expected}. Shot-making skill is real and varies a lot between players; the further outside the funnel, the more certain.`
+    : `${nOut} of ${rows.length} players sit outside ±2σ, about what pure chance would produce (${expected}). At this cut, differences are hard to tell from luck.`;
+  plot("luckChart", traces, baseLayout({ height: 420, showlegend: true, annotations: ann, margin: { l: 60, r: 14, t: 30, b: 44 },
     xaxis: { ...baseLayout().xaxis, title: { text: "Attempts" }, rangemode: "tozero" },
-    yaxis: { ...baseLayout().yaxis, title: { text: "Makes over expected" }, zeroline: true } }));
-  const luckChartEl = document.getElementById("luckChart");
-  luckChartEl.removeAllListeners?.("plotly_click");
-  luckChartEl.on?.("plotly_click", ev => ev.points[0].customdata && selectPlayer(ev.points[0].customdata[0]));
+    yaxis: { ...baseLayout().yaxis, title: { text: m.totalLabel.replace(" exp.", " expected") }, zeroline: true } }), state.metric);
+  const el = document.getElementById("luckChart");
+  el.removeAllListeners?.("plotly_click");
+  el.on?.("plotly_click", ev => ev.points[0].customdata && selectPlayer(ev.points[0].customdata[0]));
 }
 function renderOutliers() {
-  const O = DATA.outliers;
+  const O = DATA.outliers, xp = state.metric === "xpts";
   const cols = [{ label: "Player", left: true, get: r => r.PLAYER_NAME }, { label: "Team", left: true, get: r => `${r.team} vs ${r.opp}` },
     { label: "Date", get: r => dateStr(String(r.GAME_DATE)) }, { label: "Clock", get: r => clockStr(r.PERIOD, r.MINUTES_REMAINING, r.SECONDS_REMAINING) },
-    { label: "Shot", left: true, get: r => r.ACTION_TYPE }, { label: "Dist", get: r => r.SHOT_DISTANCE + " ft" }, { label: "xFG%", get: r => r.xfg, fmt: v => pct(v) }];
-  renderTable("toughTable", (state.heaves ? O.toughest_makes : O.toughest_makes_no_heaves).slice(0, 15), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
-  renderTable("easyTable", O.easiest_misses.slice(0, 15), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+    { label: "Shot", left: true, get: r => r.ACTION_TYPE }, { label: "Dist", get: r => r.SHOT_DISTANCE + " ft" },
+    { label: "xFG%", get: r => r.xfg, fmt: v => pct(v) },
+    ...(xp ? [{ label: "Pts − xPts", get: r => r.pts_oe, fmt: v => sgn(v, 2), signed: true }] : [])];
+  document.getElementById("toughTitle").textContent = xp ? "Biggest single-shot gains" : "Toughest makes";
+  document.getElementById("toughNote").textContent = xp
+    ? "Makes that beat their expected points by the most (3 − xPts for a three, 2 − xPts for a two)." : "Lowest-probability shots that went in.";
+  document.getElementById("easyTitle").textContent = xp ? "Costliest single-shot misses" : "Easiest misses";
+  document.getElementById("easyNote").textContent = xp ? "Misses that threw away the most expected points." : "Highest-probability shots that didn't.";
+  const tough = xp ? (state.heaves ? O.biggest_gains : O.biggest_gains_no_heaves) : (state.heaves ? O.toughest_makes : O.toughest_makes_no_heaves);
+  renderTable("toughTable", tough.slice(0, 15), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+  renderTable("easyTable", (xp ? O.biggest_losses : O.easiest_misses).slice(0, 15), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
 }
 
 // ---------------- controls ----------------
@@ -783,6 +834,12 @@ function initControls() {
   document.querySelectorAll("#fMode button").forEach(b => b.addEventListener("click", () => {
     state.mode = b.dataset.mode; document.querySelectorAll("#fMode button").forEach(o => o.setAttribute("aria-pressed", String(o === b))); renderMaps(); }));
 
+  document.querySelectorAll("#bMetric button").forEach(b => b.addEventListener("click", () => {
+    const next = b.dataset.metric; if (next === state.metric) return;
+    state.sortKey = (next === "xpts" ? SORT_TWIN : SORT_TWIN_BACK)[state.sortKey] || state.sortKey;
+    state.metric = next;
+    document.querySelectorAll("#bMetric button").forEach(o => o.setAttribute("aria-pressed", String(o === b)));
+    renderBoards(); renderOutliers(); }));
   const scope = document.getElementById("bScope");
   scope.replaceChildren(...DATA.leaderboards.scopes.map(s => new Option(s === "All" ? "Both seasons" : s, s)));
   scope.addEventListener("change", e => { state.scope = e.target.value; renderBoards(); });
@@ -809,8 +866,10 @@ function initControls() {
   let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => renderHex(filteredIdx()), 200); });
 }
 
-function applyUrlFilters() {   // ?player=Name deep link
-  const name = new URLSearchParams(location.search).get("player");
+function applyUrlFilters() {   // ?player=Name&metric=xpts deep links
+  const q = new URLSearchParams(location.search);
+  if (q.get("metric") === "xpts") document.querySelector('#bMetric button[data-metric="xpts"]').click();
+  const name = q.get("player");
   const i = name == null ? undefined : playerIndex.get(name);
   if (i != null) { state.player = i; document.getElementById("fPlayer").value = name; }
 }

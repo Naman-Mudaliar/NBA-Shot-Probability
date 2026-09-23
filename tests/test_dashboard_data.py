@@ -55,6 +55,9 @@ def test_leaderboards_add_up(built):
     assert players["attempts"].sum() == len(dash)
     assert players["makes"].sum() == dash["SHOT_MADE_FLAG"].sum()
     assert players["makes_oe"].sum() == pytest.approx((dash["SHOT_MADE_FLAG"] - dash["xfg"]).sum(), abs=0.5)
+    value = np.where(dash["SHOT_TYPE"] == "3PT Field Goal", 3, 2)
+    assert players["pts_oe"].sum() == pytest.approx(((dash["SHOT_MADE_FLAG"] - dash["xfg"]) * value).sum(), abs=1.0)
+    assert players["pts"].sum() == (dash["SHOT_MADE_FLAG"] * value).sum()
     offense = pd.DataFrame(payload["leaderboards"]["boards"]["All"]["team_offense"])
     defense = pd.DataFrame(payload["leaderboards"]["boards"]["All"]["team_defense"])
     assert offense["attempts"].sum() == defense["attempts"].sum() == len(dash)
@@ -79,6 +82,20 @@ def test_no_empty_sections(built):
         b = payload["leaderboards"]["boards"][scope]
         for key in ["players", "players_by_zone", "team_offense", "team_defense", "league_zones"]:
             assert len(b[key]) > 0, (scope, key)
-    for key in ["toughest_makes", "toughest_makes_no_heaves", "easiest_misses"]:
+    for key in ["toughest_makes", "toughest_makes_no_heaves", "easiest_misses",
+                "biggest_gains", "biggest_gains_no_heaves", "biggest_losses"]:
         assert len(payload["outliers"][key]) == bd.N_OUTLIERS, key
-    assert all(r["SHOT_DISTANCE"] < bd.HEAVE_FT for r in payload["outliers"]["toughest_makes_no_heaves"])
+    for key in ["toughest_makes_no_heaves", "biggest_gains_no_heaves"]:
+        for r in payload["outliers"][key]:
+            buzzer = r["MINUTES_REMAINING"] * 60 + r["SECONDS_REMAINING"] <= 3
+            assert r["SHOT_DISTANCE"] < bd.HEAVE_FT and not (buzzer and r["SHOT_DISTANCE"] >= bd.HEAVE_BUZZER_FT), (key, r)
+
+
+def test_xpts_luck_is_consistent(built):
+    """z_pts = pts_oe / sd_pts, and a three-point make gains more over expected than an equally unlikely two."""
+    payload, _ = built
+    players = pd.DataFrame(payload["leaderboards"]["boards"]["All"]["players"])
+    np.testing.assert_allclose(players["z_pts"], players["pts_oe"] / players["sd_pts"], rtol=1e-3, atol=1e-3)
+    gains = pd.DataFrame(payload["outliers"]["biggest_gains"])
+    np.testing.assert_allclose(gains["pts_oe"], gains["value"] * (1 - gains["xfg"]), atol=2e-4)
+    assert gains["pts_oe"].is_monotonic_decreasing

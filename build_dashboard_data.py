@@ -55,7 +55,8 @@ ZONE_GROUPS = {  # coarse groups for leaderboard splits
 }
 GRID_X = (-25, 25)       # feet, 1 ft cells
 GRID_Y = (-5, 40)
-HEAVE_FT = 35            # outlier lists also offered without shots from this far out
+HEAVE_FT = 35            # heave = 35+ ft, or HEAVE_BUZZER_FT+ ft with <= 3 s left in the period;
+HEAVE_BUZZER_FT = 28     # outlier lists are also offered without heaves
 N_OUTLIERS = 50
 MIN_ATTEMPTS_DEFAULT = 300
 MIN_ATTEMPTS_ZONE_SPLIT = 100   # per-zone splits only for players with real volume (payload size)
@@ -223,19 +224,38 @@ def shots_section(shots: pd.DataFrame, lookups: dict) -> dict:
             "columns": {k: {"dtype": dt, "data": _pack(a, dt)} for k, (a, dt) in cols.items()}}
 
 
+def shot_value(df: pd.DataFrame) -> np.ndarray:
+    return np.where(df["SHOT_TYPE"] == "3PT Field Goal", 3, 2)
+
+
 def _board(df: pd.DataFrame, keys) -> pd.DataFrame:
-    """Actual vs expected per group, with a luck z-score (binomial SE under xFG)."""
-    g = df.assign(var=df["xfg"] * (1 - df["xfg"])).groupby(keys)
+    """Actual vs expected per group, in makes (xFG) and in points (xPts = xFG x shot value).
+
+    Luck: each shot is a Bernoulli(xFG) trial, so under "no skill beyond the model" the
+    over-expected total has variance sum(p(1-p)) for makes and sum(v^2 p(1-p)) for points.
+    z = over-expected / sqrt(variance); sd_* is that sqrt, for the ±2σ funnel."""
+    v = shot_value(df)
+    p = df["xfg"].to_numpy()
+    g = df.assign(var=p * (1 - p), pts=df["SHOT_MADE_FLAG"] * v, xpts=p * v,
+                  var_pts=v ** 2 * p * (1 - p)).groupby(keys)
     out = g.agg(attempts=("SHOT_MADE_FLAG", "size"), makes=("SHOT_MADE_FLAG", "sum"),
                 xmakes=("xfg", "sum"), var=("var", "sum"),
+                pts=("pts", "sum"), xpts=("xpts", "sum"), var_pts=("var_pts", "sum"),
                 three_rate=("SHOT_TYPE", lambda s: (s == "3PT Field Goal").mean()),
                 avg_dist=("SHOT_DISTANCE", "mean")).reset_index()
     out["fg_pct"] = out["makes"] / out["attempts"]
     out["xfg_pct"] = out["xmakes"] / out["attempts"]
     out["fg_oe"] = out["fg_pct"] - out["xfg_pct"]
     out["makes_oe"] = out["makes"] - out["xmakes"]
-    out["z"] = out["makes_oe"] / np.sqrt(out["var"])
-    return out.drop(columns="var")
+    out["sd_makes"] = np.sqrt(out["var"])
+    out["z"] = out["makes_oe"] / out["sd_makes"]
+    out["pps"] = out["pts"] / out["attempts"]          # points per shot
+    out["xpps"] = out["xpts"] / out["attempts"]        # expected points per shot (shot quality in points)
+    out["pps_oe"] = out["pps"] - out["xpps"]
+    out["pts_oe"] = out["pts"] - out["xpts"]
+    out["sd_pts"] = np.sqrt(out["var_pts"])
+    out["z_pts"] = out["pts_oe"] / out["sd_pts"]
+    return out.drop(columns=["var", "var_pts", "xmakes", "xpts"])
 
 
 def leaderboards(shots: pd.DataFrame, seasons) -> dict:
@@ -263,14 +283,24 @@ def leaderboards(shots: pd.DataFrame, seasons) -> dict:
 
 def outliers(shots: pd.DataFrame) -> dict:
     cols = ["PLAYER_NAME", "team", "opp", "GAME_DATE", "PERIOD", "MINUTES_REMAINING", "SECONDS_REMAINING",
-            "ACTION_TYPE", "zone_name", "SHOT_DISTANCE", "xfg", "SHOT_MADE_FLAG"]
+            "ACTION_TYPE", "zone_name", "SHOT_DISTANCE", "xfg", "value", "xpts", "pts_oe", "SHOT_MADE_FLAG"]
+    shots = shots.assign(value=shot_value(shots))
+    shots["xpts"] = shots["xfg"] * shots["value"]
+    shots["pts_oe"] = shots["SHOT_MADE_FLAG"] * shots["value"] - shots["xpts"]
     made, missed = shots[shots["SHOT_MADE_FLAG"] == 1], shots[shots["SHOT_MADE_FLAG"] == 0]
-    near = lambda d: d[d["SHOT_DISTANCE"] < HEAVE_FT]
+    buzzer = shots["MINUTES_REMAINING"] * 60 + shots["SECONDS_REMAINING"] <= 3
+    heave = (shots["SHOT_DISTANCE"] >= HEAVE_FT) | (buzzer & (shots["SHOT_DISTANCE"] >= HEAVE_BUZZER_FT))
+    near = lambda d: d[~heave.loc[d.index]]
     return {
         "heave_ft": HEAVE_FT,
+        # xFG: least likely makes / most likely misses
         "toughest_makes": _rnd(made.nsmallest(N_OUTLIERS, "xfg")[cols]),
         "toughest_makes_no_heaves": _rnd(near(made).nsmallest(N_OUTLIERS, "xfg")[cols]),
         "easiest_misses": _rnd(missed.nlargest(N_OUTLIERS, "xfg")[cols]),
+        # xPts: most points gained over expected on one make / most expected points thrown away on one miss
+        "biggest_gains": _rnd(made.nlargest(N_OUTLIERS, "pts_oe")[cols]),
+        "biggest_gains_no_heaves": _rnd(near(made).nlargest(N_OUTLIERS, "pts_oe")[cols]),
+        "biggest_losses": _rnd(missed.nsmallest(N_OUTLIERS, "pts_oe")[cols]),
     }
 
 
