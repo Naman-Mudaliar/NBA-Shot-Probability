@@ -13,3 +13,7 @@ data/*.csv
 models/*.json
 !models/metrics.json
 models/synthetic/
+
+# dashboard: built artifacts (embed real data), rebuilt by run_pipeline.py
+dashboard/*.html
+!dashboard/dashboard_template.html

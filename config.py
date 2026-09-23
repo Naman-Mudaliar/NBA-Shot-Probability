@@ -29,6 +29,9 @@ def outputs(synthetic: bool) -> dict:
         "features": data / "shots_features.parquet",
         "predictions": data / "predictions.parquet",
         "models": models,
+        "dashboard_data": data / "dashboard_data.json",
+        "dashboard_html": (DASHBOARD_DIR / "dashboard_synthetic.html") if synthetic
+                          else (DASHBOARD_DIR / "dashboard.html"),
     }
 
 
@@ -37,6 +40,10 @@ SEASONS = [f"{y}-{str(y + 1)[-2:]}" for y in range(2013, 2026)]  # 2013-14 .. 20
 SYNTHETIC_SEASONS = [f"{y}-{str(y + 1)[-2:]}" for y in range(2018, 2024)]  # 6 seasons, fast
 TRAIN_FRAC = 0.7        # first 70% of seasons train (last of those = early-stopping season)
 ONLINE_CHUNK = "W"      # walk-forward update cadence over held-out seasons
+DASHBOARD_SEASONS = 2   # dashboard shows the last N walk-forward seasons
+
+DASHBOARD_DIR = ROOT / "dashboard"
+DASHBOARD_TEMPLATE = DASHBOARD_DIR / "dashboard_template.html"
 
 # ---- raw schema: exactly what nba_api ShotChartDetail returns, plus SEASON ----
 # kind: "int" | "str"

@@ -76,7 +76,7 @@ def action_family(action: pd.Series) -> pd.Series:
                      index=action.index)
 
 
-def _team_abbr(df: pd.DataFrame) -> pd.Series:
+def team_abbr(df: pd.DataFrame) -> pd.Series:
     """Shooter team's abbreviation per row: for each (TEAM_ID, SEASON), the HTM/VTM
     code that appears in every one of its games."""
     both = pd.concat([
@@ -154,7 +154,7 @@ def build_features(raw: pd.DataFrame) -> pd.DataFrame:
     out["seconds_left"] = df["MINUTES_REMAINING"] * 60 + df["SECONDS_REMAINING"]
     out["last_24s"] = (out["seconds_left"] <= 24).astype(int)
     out["last_3s"] = (out["seconds_left"] <= 3).astype(int)
-    team = _team_abbr(df)
+    team = team_abbr(df)
     out["home"] = (team == df["HTM"]).astype(int)
 
     # --- defense + era (past-only) ---
