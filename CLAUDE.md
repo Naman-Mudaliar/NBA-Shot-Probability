@@ -44,6 +44,6 @@ trained on early seasons and updated walk-forward (weekly) through recent ones.
 - `features.py`, `split.py`, `train_model.py` — model pipeline.
 - `build_dashboard_data.py` — payload for the last `DASHBOARD_SEASONS` walk-forward seasons (shots as
   gzip+base64 typed columns, leaderboards, outliers, training history) embedded into
-  `dashboard/dashboard_template.html` → `dashboard/dashboard.html` (real) / `dashboard_synthetic.html`.
+  `dashboard/dashboard_template.html` → `dashboard/dashboard.html` (real) / `data/synthetic/dashboard_synthetic.html` (fast loop).
   Built HTML is gitignored. Page self-check: headless Chrome `--dump-dom` → `<pre id="selfcheck">` JSON
   (errors + per-chart point counts); `?theme=light|dark&player=Name` for screenshots.

@@ -30,7 +30,8 @@ def outputs(synthetic: bool) -> dict:
         "predictions": data / "predictions.parquet",
         "models": models,
         "dashboard_data": data / "dashboard_data.json",
-        "dashboard_html": (DASHBOARD_DIR / "dashboard_synthetic.html") if synthetic
+        # synthetic build lives with the synthetic data so dashboard/ only ever holds the real one
+        "dashboard_html": (SYNTHETIC_DIR / "dashboard_synthetic.html") if synthetic
                           else (DASHBOARD_DIR / "dashboard.html"),
     }
 
