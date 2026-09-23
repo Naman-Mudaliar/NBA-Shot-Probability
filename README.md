@@ -1,82 +1,68 @@
-# NBA Shot Probability Model
+# NBA Shot Probability (xFG%)
 
-End-to-end pipeline that predicts shot make probability ("expected FG%") from
-spatial and situational context, plus an interactive dashboard for exploring
-model outputs and player shot-making performance.
+A **shooter-blind** expected-FG% model trained on every regular-season NBA shot from
+2013-14 to 2025-26 (2.73M shots, stats.nba.com), plus a self-contained dashboard.
 
-**Stack:** Python, pandas, XGBoost, scikit-learn
+xFG% answers: *how likely is an average NBA player to make this shot, against this
+defense?* The model sees only the shot (location, shot type, game situation) and the
+opponent's defense from earlier games — never who is shooting. So a player's
+**actual FG% − xFG%** is their shot-making skill (or luck), and **average xFG%** is the
+quality of the shots they take.
 
-## Pipeline
+## Results (held-out, 2022-23 → 2025-26)
+
+| Model | Log loss | AUC |
+|---|---|---|
+| **Weekly-updated (walk-forward)** | **0.6386** | **0.657** |
+| Frozen after training | 0.6402 | 0.652 |
+| League FG% by zone | 0.6595 | 0.634 |
+
+Beats both baselines in every held-out season; calibration within 0.6 pts in every bin.
+Top shot-makers over expected (2024-25 & 2025-26): Jokić (+10.7 pts), Durant, Gilgeous-Alexander.
+
+## How it works
 
 ```
-generate_data.py        -> data/shots_raw.csv        (raw shot events)
-features.py              -> data/shots_features.csv   (engineered features)
-train_model.py            -> models/xgb_shot_model.json, models/metrics.json,
-                             models/feature_importance.csv, data/predictions.csv
-build_dashboard_data.py   -> dashboard/dashboard_data.json (player/zone reports)
+fetch_data.py         nba_api shot charts, per team per season -> data/raw/ (checkpointed)
+features.py           shot-only features + past-only opponent zone defense
+split.py              train 2013-14..2020-21 | early-stop 2021-22 | walk-forward 2022-23..2025-26
+train_model.py        XGBoost offline fit, then weekly predict-then-learn; frozen + zone baselines
+build_dashboard_data  last 2 walk-forward seasons -> dashboard/dashboard.html (self-contained)
 ```
 
-Run the full pipeline:
+Every xFG% shown was predicted **before** the model trained on that shot.
+
+## Running it
 
 ```bash
 pip install -r requirements.txt
-python run_pipeline.py
+
+python run_pipeline.py --synthetic   # fast loop (~30 s, no network): generate -> features -> train -> dashboard -> tests
+python fetch_data.py                 # real data, ~25 min first time; resumable, skips completed seasons
+python run_pipeline.py               # real run: features -> train -> dashboard -> tests
 ```
 
-Then rebuild the self-contained dashboard (embeds the JSON payload inline so
-it opens with no server, right from the file system):
-
-```bash
-python - <<'EOF'
-data = open("dashboard/dashboard_data.json").read()
-tmpl = open("dashboard/dashboard_template.html").read()
-open("dashboard/dashboard.html", "w").write(tmpl.replace("__DATA_JSON__", data))
-EOF
-```
-
-Open `dashboard/dashboard.html` in any browser — no server required.
-
-## Data
-
-This sandbox has no outbound network access, so `generate_data.py` produces a
-**statistically calibrated synthetic dataset** (30,000 shot events, 60
-players) instead of pulling live data. Make probabilities are seeded from
-published NBA league-average FG% by zone (restricted area ~64%, corner 3
-~39%, above-the-break 3 ~35%, etc.) and perturbed by defender distance, shot
-clock, dribbles/touch time, and a latent per-player skill offset — so
-downstream model behavior (feature importances, calibration, AUC) matches
-what you'd see on a real shot log.
-
-To run on real data, swap `generate_data.py` for `nba_api` calls
-(`shotchartdetail` endpoint) — the feature engineering, training, and
-dashboard code are unchanged.
-
-## Features
-
-Spatial: shot distance, angle from hoop, quadrant, distance bucket, zone.
-Situational: shot clock (+ pressure buckets), dribbles, touch time,
-catch-and-shoot flag, defender distance (+ tight/open flags), clutch flag
-(Q4/OT, close game, final 5 min), period, home/away, score margin, fatigue
-proxy.
-
-## Model
-
-Binary XGBoost classifier (`binary:logistic`), early-stopped on held-out
-log loss. Evaluated with ROC-AUC, log loss (vs. base-rate baseline), Brier
-score, and a 10-bin calibration curve. Typical run: **AUC ≈ 0.66, log loss
-≈ 0.64** — in line with published expected-FG% models, since shot outcomes
-are inherently noisy (defense, contest, luck) even with strong shot-quality
-features. Restricted-area zone and shot distance dominate feature
-importance, as expected.
+Open `dashboard/dashboard.html` in a browser (needs internet once for the Plotly CDN).
+Deep links: `dashboard.html?player=Stephen%20Curry&theme=dark`.
 
 ## Dashboard
 
-Single-file HTML dashboard (Plotly.js via CDN, everything else vanilla JS,
-no backend):
+- **Training data & model** — shots per season by role in training, 13-season league
+  trends (FG%, 3PA rate, shot mix by zone), week-by-week held-out accuracy vs the frozen
+  and zone baselines, calibration, feature importance, per-season metrics.
+- **Shot maps** (filter by season, team, player, opponent, shot type, result; color by
+  xFG%, actual FG% or actual − xFG) — 14-zone map, probability hex map, individual shots,
+  and where the selection beats the model zone by zone.
+- **xFG outliers** — shot-making leaderboard (sortable, by zone group, min attempts),
+  shot quality vs shot-making quadrant, luck check with a ±2σ funnel, best/toughest shot
+  diets, toughest makes and easiest misses, team offense and defense.
 
-- Interactive shot chart on a half-court diagram, colored by predicted make
-  probability, filterable by player / zone / period / result
-- Model calibration curve and feature-importance chart
-- Zone report: actual vs. expected FG% by shot zone
-- Player report: actual FG% vs. expected FG%, sortable, surfacing shot-making
-  skill (makes over expectation) — who's outperforming their shot quality
+## Leakage safeguards
+
+Enforced by `tests/test_leakage.py` on every fast-loop run: no shooter columns in the
+model inputs, predictions invariant to shuffling shooter identity, defense features
+unaffected by scrambling future results, chronological split, every walk-forward
+prediction made before training on that shot (plus a label-flip test), and planted
+synthetic shooter skill recovered from actual − xFG.
+
+See `CLAUDE.md` for the development workflow and stats.nba.com gotchas.

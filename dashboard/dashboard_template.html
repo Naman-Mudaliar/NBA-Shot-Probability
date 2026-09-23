@@ -1,333 +1,837 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>NBA Shot Probability Model — Dashboard</title>
-<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NBA xFG%</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.32.0/plotly.min.js"></script>
 <style>
-  :root {
-    --bg: #0b1020;
-    --panel: #12182e;
-    --panel-2: #161d38;
-    --border: #232b4d;
-    --text: #e8ebf7;
-    --muted: #8b93b8;
-    --accent: #ff6b35;
-    --accent2: #3d7bff;
-    --good: #34d399;
-    --bad: #f87171;
+/* ---------- tokens (reference data-viz palette, light + selected dark steps) ---------- */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface-1: #fcfcfb; --surface-2: #f3f2ef;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #6f6d68;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4;
+  --div-mid: #f0efec; --cold: #256abf; --hot: #c23a3a; --muted-mark: #b9b7ae;
+  --good-text: #006300; --bad-text: #b3261e;
+  --accent: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #232321;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #9a988f;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
+    --div-mid: #383835; --cold: #5598e7; --hot: #e66767; --muted-mark: #55544f;
+    --good-text: #0ca30c; --bad-text: #ff8a80;
+    --accent: #3987e5;
   }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-  }
-  header {
-    padding: 20px 28px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  header h1 { margin: 0; font-size: 20px; font-weight: 700; }
-  header .sub { color: var(--muted); font-size: 13px; }
-  .metrics-strip {
-    display: flex;
-    gap: 12px;
-    padding: 14px 28px;
-    flex-wrap: wrap;
-    border-bottom: 1px solid var(--border);
-  }
-  .metric-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 16px;
-    min-width: 130px;
-  }
-  .metric-card .val { font-size: 20px; font-weight: 700; }
-  .metric-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  main {
-    display: grid;
-    grid-template-columns: 340px 1fr;
-    gap: 20px;
-    padding: 20px 28px 40px;
-  }
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-  }
-  .panel h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-  .filters label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
-  select, input[type=range] { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-size: 13px; }
-  .stack { display: flex; flex-direction: column; gap: 20px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; cursor: pointer; position: sticky; top: 0; background: var(--panel); }
-  tbody tr:hover { background: var(--panel-2); }
-  .pos { color: var(--good); }
-  .neg { color: var(--bad); }
-  .scroll-table { max-height: 340px; overflow-y: auto; }
-  .tag { display: inline-block; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--muted); }
-  footer { text-align: center; color: var(--muted); font-size: 11px; padding: 20px; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #232321;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #9a988f;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
+  --div-mid: #383835; --cold: #5598e7; --hot: #e66767; --muted-mark: #55544f;
+  --good-text: #0ca30c; --bad-text: #ff8a80;
+  --accent: #3987e5;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 24px 20px 64px; }
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+h1 { font-size: 26px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--text-secondary); margin-top: 4px; }
+.badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); margin-left: 6px; }
+.badge.warn { color: var(--bad-text); }
+h2 { font-size: 19px; margin: 36px 0 4px; }
+h2 + .lede { color: var(--text-secondary); margin: 0 0 14px; max-width: 900px; }
+h3 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
+.note { color: var(--text-muted); font-size: 12.5px; margin: 0 0 8px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.g4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+@media (max-width: 480px) { .g2 { grid-template-columns: 1fr; } }
+.tile .label { color: var(--text-secondary); font-size: 12.5px; }
+.tile .value { font-size: 28px; font-weight: 650; margin: 2px 0; }
+.tile .cmp { color: var(--text-muted); font-size: 12.5px; }
+.chart { width: 100%; min-height: 260px; }
+.chart.court { min-height: 440px; }
+.empty { color: var(--text-muted); padding: 40px 10px; text-align: center; }
+
+/* filters: one row above everything they scope */
+.filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+.filters label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-secondary); }
+select, input[type=text], input[type=search] { font: inherit; color: var(--text-primary); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; min-width: 120px; }
+input[type=range] { width: 160px; accent-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; border: 0; background: var(--surface-2); color: var(--text-secondary); padding: 6px 10px; cursor: pointer; }
+.seg button[aria-pressed=true] { background: var(--accent); color: #fff; }
+button.link { font: inherit; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; }
+button.ghost { font: inherit; font-size: 13px; background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+.summary { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--text-secondary); margin: 0 0 12px; font-size: 13px; }
+.summary b { color: var(--text-primary); font-weight: 600; }
+
+/* tables */
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+th { color: var(--text-secondary); font-weight: 600; position: sticky; top: 0; background: var(--surface-1); }
+th.sort { cursor: pointer; user-select: none; }
+th.sort[aria-sort=descending]::after { content: " \25BE"; }
+th.sort[aria-sort=ascending]::after { content: " \25B4"; }
+tbody tr.click { cursor: pointer; }
+tbody tr.click:hover { background: var(--surface-2); }
+.pos { color: var(--good-text); } .neg { color: var(--bad-text); }
+details.tbl { margin-top: 8px; }
+details.tbl summary { cursor: pointer; color: var(--text-secondary); font-size: 12.5px; }
+details.tbl .tbl-wrap { max-height: 320px; overflow: auto; margin-top: 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+footer { color: var(--text-muted); font-size: 12px; margin-top: 40px; }
 </style>
 </head>
 <body>
-
-<header>
-  <div>
-    <h1>NBA Shot Probability Model</h1>
-    <div class="sub">XGBoost expected-FG% model &middot; interactive shot chart, player reports &amp; model diagnostics</div>
-  </div>
-  <div class="tag">synthetic demo dataset &middot; 30,000 shot events</div>
-</header>
-
-<div class="metrics-strip" id="metricsStrip"></div>
-
-<main>
-  <div class="panel filters">
-    <h2>Filters</h2>
-    <label for="playerSel">Player</label>
-    <select id="playerSel"><option value="">All players</option></select>
-
-    <label for="zoneSel">Shot Zone</label>
-    <select id="zoneSel"><option value="">All zones</option></select>
-
-    <label for="periodSel">Period</label>
-    <select id="periodSel">
-      <option value="">All periods</option>
-      <option value="1">Q1</option><option value="2">Q2</option>
-      <option value="3">Q3</option><option value="4">Q4</option><option value="5">OT</option>
-    </select>
-
-    <label for="resultSel">Result</label>
-    <select id="resultSel">
-      <option value="">Makes &amp; misses</option>
-      <option value="1">Makes only</option>
-      <option value="0">Misses only</option>
-    </select>
-
-    <div id="filterSummary" style="margin-top:16px; font-size:12px; color:var(--muted);"></div>
-
-    <h2 style="margin-top:24px;">Feature Importance (gain)</h2>
-    <div id="importanceChart"></div>
-  </div>
-
-  <div class="stack">
-    <div class="grid2">
-      <div class="panel">
-        <h2>Shot Chart — colored by predicted make probability</h2>
-        <div id="courtChart"></div>
-      </div>
-      <div class="panel">
-        <h2>Model Calibration (test set)</h2>
-        <div id="calChart"></div>
-      </div>
+<div class="wrap viz-root">
+  <header class="top">
+    <div>
+      <h1>NBA Shot Probability <span style="font-weight:400;color:var(--text-secondary)">(xFG%)</span></h1>
+      <div class="sub" id="subtitle"></div>
     </div>
+    <button class="ghost" id="themeBtn" type="button" aria-label="Toggle theme">Theme: system</button>
+  </header>
 
-    <div class="panel">
-      <h2>Zone Report — Actual vs. Expected FG%</h2>
-      <div id="zoneChart"></div>
-    </div>
+  <div class="grid g4" id="tiles"></div>
 
-    <div class="panel">
-      <h2>Player Report — Shot-Making Skill (Actual FG% − Expected FG%), min. 80 attempts</h2>
-      <div class="scroll-table">
-        <table id="playerTable">
-          <thead>
-            <tr>
-              <th data-key="player_name">Player</th>
-              <th data-key="team">Team</th>
-              <th data-key="attempts">Att</th>
-              <th data-key="actual_fg_pct">Actual FG%</th>
-              <th data-key="expected_fg_pct">Expected FG%</th>
-              <th data-key="fg_pct_over_expected">FG% Over Exp.</th>
-              <th data-key="makes_over_expected">Makes Over Exp.</th>
-            </tr>
-          </thead>
-          <tbody id="playerTableBody"></tbody>
-        </table>
-      </div>
-    </div>
+  <!-- ================= A. Training & model ================= -->
+  <h2 id="training">Training data &amp; model</h2>
+  <p class="lede">The model is <b>shooter-blind</b>: it only sees the shot (location, type, game situation) and
+    the opponent's defense from earlier games. It trained on the early seasons, then walked forward week by week,
+    predicting each week <b>before</b> learning from it. Every xFG% on this page is one of those pre-shot predictions.</p>
+  <div class="grid g2">
+    <div class="card"><h3>Shots per season, by role in training</h3>
+      <p class="note">Train seasons fit the model, the early-stop season picks how long to train, walk-forward seasons are predicted week by week.</p>
+      <div class="chart" id="coverageChart"></div>
+      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="coverageTable"></div></details></div>
+    <div class="card"><h3>Held-out accuracy, week by week</h3>
+      <p class="note">Log loss (lower is better), 4-week rolling. The weekly-updated model pulls away from the frozen one as the league drifts.</p>
+      <div class="chart" id="curveChart"></div>
+      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="seasonMetricsTable2"></div></details></div>
   </div>
-</main>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><h3>League FG% by season</h3><div class="chart" id="fgTrendChart"></div></div>
+    <div class="card"><h3>3-point attempt rate by season</h3><div class="chart" id="threeTrendChart"></div></div>
+    <div class="card"><h3>Shot mix by zone group</h3><div class="chart" id="mixChart"></div>
+      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="mixTable"></div></details></div>
+  </div>
+  <div class="grid g3" style="margin-top:14px">
+    <div class="card"><h3>Calibration (held-out)</h3>
+      <p class="note">Predicted vs actual make rate in 10 equal-size bins. On the diagonal = honest probabilities.</p>
+      <div class="chart" id="calChart"></div>
+      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="calTable"></div></details></div>
+    <div class="card"><h3>What drives the prediction</h3>
+      <p class="note">Feature importance (gain), top 15.</p>
+      <div class="chart" id="impChart"></div>
+      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="impTable"></div></details></div>
+    <div class="card"><h3>Per-season metrics (walk-forward)</h3>
+      <p class="note">Log loss for weekly-updated / frozen / zone-average baseline.</p>
+      <div class="tbl-wrap" id="seasonMetricsTable"></div></div>
+  </div>
 
-<footer>NBA Shot Probability Model &middot; Python / pandas / XGBoost / scikit-learn pipeline &middot; demo dashboard built with Plotly</footer>
+  <!-- ================= B. Shot maps ================= -->
+  <h2 id="maps">Shot maps</h2>
+  <p class="lede">Every held-out shot from the dashboard seasons. Filters apply to all three maps and the zone table.</p>
+  <div class="filters" id="filters">
+    <label>Season <select id="fSeason"></select></label>
+    <label>Team <select id="fTeam"></select></label>
+    <label>Player <span style="display:flex;gap:4px"><input type="search" id="fPlayer" list="playerList" placeholder="Any player" autocomplete="off"><button class="ghost" id="fPlayerClear" type="button" aria-label="Clear player">&times;</button></span></label>
+    <datalist id="playerList"></datalist>
+    <label>Opponent <select id="fOpp"></select></label>
+    <label>Shot type <select id="fFamily"></select></label>
+    <label>Result <select id="fResult"><option value="all">All</option><option value="1">Made</option><option value="0">Missed</option></select></label>
+    <label>Color by <span class="seg" id="fMode" role="group">
+      <button type="button" data-mode="xfg" aria-pressed="true">xFG%</button>
+      <button type="button" data-mode="fg" aria-pressed="false">Actual FG%</button>
+      <button type="button" data-mode="diff" aria-pressed="false">Actual &minus; xFG</button></span></label>
+  </div>
+  <div class="summary" id="filterSummary"></div>
+  <div class="grid g2">
+    <div class="card"><h3>Zone map</h3><p class="note" id="zoneNote"></p>
+      <div class="chart court" id="zoneChart"></div>
+      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="zoneTable"></div></details></div>
+    <div class="card"><h3>Probability hex map</h3><p class="note">Hex size = shot volume, color = the selected measure. Hexes with very few shots are hidden.</p>
+      <div class="chart court" id="hexChart"></div></div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Individual shots</h3><p class="note" id="scatterNote">Filled = made, hollow = missed, color = xFG%.</p>
+      <div class="chart court" id="scatterChart"></div></div>
+    <div class="card"><h3 id="zoneDeltaTitle">Where the selection beats the model</h3>
+      <p class="note">Actual FG% minus xFG% by zone (zones with 15+ attempts). Right = made more than the shot quality predicts.</p>
+      <div class="chart" id="zoneDeltaChart" style="min-height:440px"></div></div>
+  </div>
 
+  <!-- ================= C. xFG outliers ================= -->
+  <h2 id="outliers">xFG outliers</h2>
+  <p class="lede"><b>Shot quality</b> = average xFG% of the shots a player takes. <b>Shot-making</b> = actual FG% minus xFG%.
+    Because the model never sees the shooter, the gap is the player's own skill (or luck). <b>z</b> = makes over expected divided by
+    the binomial standard error, so |z| &gt; 2 is unlikely to be luck alone. Click any player to load them in the shot maps.</p>
+  <div class="filters" id="boardFilters">
+    <label>Scope <select id="bScope"></select></label>
+    <label>Zones <select id="bZone"></select></label>
+    <label>Min attempts <span style="display:flex;align-items:center;gap:8px"><input type="range" id="bMin" min="50" max="1500" step="50"><b id="bMinVal"></b></span></label>
+  </div>
+  <div class="card"><div class="row"><h3>Shot-making leaderboard</h3><button class="link" id="boardMore" type="button"></button></div>
+    <div class="tbl-wrap" id="boardTable"></div></div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Shot quality vs shot-making</h3>
+      <p class="note">Each dot is a player (size = attempts). Lines at the medians.</p>
+      <div class="chart" id="quadChart" style="min-height:420px"></div></div>
+    <div class="card"><h3>Luck check</h3>
+      <p class="note">Makes over expected vs volume. The shaded funnel is &plusmn;2&sigma; of pure chance at league shot quality.</p>
+      <div class="chart" id="luckChart" style="min-height:420px"></div></div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Best shot diets (highest avg xFG%)</h3><div class="tbl-wrap" id="qualityTop"></div></div>
+    <div class="card"><h3>Toughest shot diets (lowest avg xFG%)</h3><div class="tbl-wrap" id="qualityBottom"></div></div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><div class="row"><h3>Toughest makes</h3>
+      <label style="font-size:12.5px;color:var(--text-secondary)"><input type="checkbox" id="heaves"> include heaves</label></div>
+      <p class="note">Lowest-probability shots that went in.</p><div class="tbl-wrap" id="toughTable"></div></div>
+    <div class="card"><h3>Easiest misses</h3><p class="note">Highest-probability shots that didn't.</p><div class="tbl-wrap" id="easyTable"></div></div>
+  </div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h3>Team offense: shot-making</h3><p class="note">Makes over expected on the team's own shots.</p><div class="tbl-wrap" id="teamOff"></div></div>
+    <div class="card"><h3>Team defense: shot-making allowed</h3><p class="note">Opponents' makes over expected (negative = opponents shot worse than their shot quality).</p><div class="tbl-wrap" id="teamDef"></div></div>
+  </div>
+
+  <footer id="footer"></footer>
+  <pre id="selfcheck" hidden></pre>
+</div>
+
+<script type="application/json" id="dashboard-data">__DASHBOARD_DATA__</script>
 <script>
-const DATA = __DATA_JSON__;
+"use strict";
+const DATA = JSON.parse(document.getElementById("dashboard-data").textContent);
+const CHECK = { errors: [], charts: {} };
+window.addEventListener("error", e => CHECK.errors.push(String(e.message)));
+window.addEventListener("unhandledrejection", e => CHECK.errors.push(String(e.reason)));
 
-// ---------- populate filter dropdowns ----------
-const playerSel = document.getElementById('playerSel');
-DATA.players.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; playerSel.appendChild(o); });
-const zoneSel = document.getElementById('zoneSel');
-DATA.zones.forEach(z => { const o = document.createElement('option'); o.value = z; o.textContent = z; zoneSel.appendChild(o); });
+// ---------------- formatting ----------------
+const pct = (v, d = 1) => v == null || isNaN(v) ? "–" : (v * 100).toFixed(d) + "%";
+const pts = (v, d = 1) => v == null || isNaN(v) ? "–" : (v >= 0 ? "+" : "−") + Math.abs(v * 100).toFixed(d);
+const sgn = (v, d = 1) => v == null || isNaN(v) ? "–" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
+const int = v => v == null ? "–" : Math.round(v).toLocaleString();
+const clockStr = (period, m, s) => `${period > 4 ? "OT" + (period - 4) : "Q" + period} ${m}:${String(s).padStart(2, "0")}`;
+const dateStr = d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
 
-// ---------- metrics strip ----------
-const m = DATA.metrics;
-const metricsHtml = [
-  ['ROC AUC', m.roc_auc],
-  ['Log Loss', m.log_loss + ' (base ' + m.baseline_log_loss + ')'],
-  ['Brier Score', m.brier_score],
-  ['League Avg FG%', (m.base_rate_fg_pct*100).toFixed(1) + '%'],
-  ['Train / Test', m.n_train.toLocaleString() + ' / ' + m.n_test.toLocaleString()],
-].map(([label, val]) => `<div class="metric-card"><div class="val">${val}</div><div class="label">${label}</div></div>`).join('');
-document.getElementById('metricsStrip').innerHTML = metricsHtml;
-
-// ---------- feature importance ----------
-Plotly.newPlot('importanceChart', [{
-  type: 'bar', orientation: 'h',
-  x: DATA.feature_importance.map(d => d.gain).reverse(),
-  y: DATA.feature_importance.map(d => d.feature).reverse(),
-  marker: { color: '#ff6b35' },
-}], {
-  margin: { l: 140, r: 10, t: 4, b: 30 }, height: 340,
-  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-  font: { color: '#e8ebf7', size: 10 },
-  xaxis: { gridcolor: '#232b4d' },
-}, { displayModeBar: false, responsive: true });
-
-// ---------- calibration ----------
-const cal = m.calibration;
-Plotly.newPlot('calChart', [
-  { x: [0,1], y: [0,1], mode: 'lines', line: { dash: 'dot', color: '#8b93b8' }, name: 'Perfect calibration' },
-  { x: cal.predicted_mean_by_bin, y: cal.actual_frac_by_bin, mode: 'lines+markers', name: 'Model',
-    line: { color: '#3d7bff' }, marker: { size: 7 } },
-], {
-  margin: { l: 45, r: 10, t: 4, b: 40 }, height: 300,
-  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-  font: { color: '#e8ebf7', size: 11 },
-  xaxis: { title: 'Predicted probability', gridcolor: '#232b4d' },
-  yaxis: { title: 'Actual frequency', gridcolor: '#232b4d' },
-  legend: { orientation: 'h', y: -0.25 },
-}, { displayModeBar: false, responsive: true });
-
-// ---------- zone report ----------
-function drawZoneChart() {
-  const zr = DATA.zone_report.slice().sort((a,b) => b.attempts - a.attempts);
-  Plotly.newPlot('zoneChart', [
-    { type: 'bar', name: 'Actual FG%', x: zr.map(d => d.shot_zone), y: zr.map(d => d.actual_fg_pct), marker: { color: '#3d7bff' } },
-    { type: 'bar', name: 'Expected FG%', x: zr.map(d => d.shot_zone), y: zr.map(d => d.expected_fg_pct), marker: { color: '#ff6b35' } },
-  ], {
-    barmode: 'group', margin: { l: 45, r: 10, t: 4, b: 90 }, height: 300,
-    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-    font: { color: '#e8ebf7', size: 11 },
-    yaxis: { title: 'FG%', gridcolor: '#232b4d', tickformat: '.0%' },
-    legend: { orientation: 'h', y: -0.5 },
-  }, { displayModeBar: false, responsive: true });
+// ---------------- theme ----------------
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const isDark = () => tok("color-scheme") === "dark";
+const BLUE = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"];
+const RED = ["#fbe1e0", "#f6bdbc", "#ef9695", "#e86f6e", "#e34948", "#c23a3a", "#9e2d2d"];
+function seqScale() {
+  const ramp = isDark() ? [...BLUE].reverse() : BLUE;
+  return ramp.map((c, i) => [i / (ramp.length - 1), c]);
 }
-drawZoneChart();
+function divScale() {
+  const mid = tok("--div-mid");
+  const coldArm = ["#104281", "#256abf", "#5598e7", "#9ec5f4"];
+  const hotArm = ["#f6bdbc", "#e86f6e", "#c23a3a", "#9e2d2d"];
+  const stops = [...coldArm, mid, ...hotArm];
+  return stops.map((c, i) => [i / (stops.length - 1), c]);
+}
+const XFG_RANGE = [0.25, 0.75];
 
-// ---------- court shot chart ----------
-function courtShapes() {
-  const s = [];
-  const line = { line: { color: '#3a4270', width: 1.5 } };
-  // hoop
-  s.push({ type: 'circle', x0: -0.75, y0: -0.75, x1: 0.75, y1: 0.75, ...line });
-  // backboard
-  s.push({ type: 'line', x0: -3, y0: -1.3, x1: 3, y1: -1.3, ...line });
-  // paint
-  s.push({ type: 'rect', x0: -8, y0: -1.3, x1: 8, y1: 19, ...line });
-  s.push({ type: 'rect', x0: -6, y0: -1.3, x1: 6, y1: 19, ...line });
-  // free throw circle
-  s.push({ type: 'circle', x0: -6, y0: 13, x1: 6, y1: 25, ...line });
-  // restricted area
-  s.push({ type: 'circle', x0: -4, y0: -1.3, x1: 4, y1: 6.7, ...line });
-  // three point arc (approx) + corners
-  s.push({ type: 'line', x0: -22, y0: -1.3, x1: -22, y1: 9.9, ...line });
-  s.push({ type: 'line', x0: 22, y0: -1.3, x1: 22, y1: 9.9, ...line });
-  s.push({ type: 'path', path: 'M -22,9.9 Q 0,48 22,9.9', ...line });
-  // half court boundary
-  s.push({ type: 'rect', x0: -25, y0: -1.3, x1: 25, y1: 47, line: { color: '#232b4d', width: 1 } });
-  return s;
+function baseLayout(extra = {}) {
+  const grid = tok("--grid"), axis = tok("--axis"), muted = tok("--text-muted");
+  const ax = { gridcolor: grid, linecolor: axis, zerolinecolor: axis, tickfont: { color: muted, size: 11 },
+               title: { font: { color: tok("--text-secondary"), size: 12 } }, automargin: true };
+  return Object.assign({
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: tok("--surface-1"),
+    font: { family: 'system-ui, -apple-system, "Segoe UI", sans-serif', color: tok("--text-secondary"), size: 12 },
+    margin: { l: 48, r: 16, t: 10, b: 40 }, showlegend: false,
+    legend: { orientation: "h", y: 1.12, x: 0, font: { size: 11.5, color: tok("--text-secondary") } },
+    hoverlabel: { bgcolor: tok("--surface-1"), bordercolor: tok("--axis"), font: { color: tok("--text-primary") } },
+    xaxis: { ...ax }, yaxis: { ...ax },
+  }, extra);
+}
+const PCONF = { displayModeBar: false, responsive: true };
+function plot(id, traces, layout) {
+  try {
+    const el = document.getElementById(id);
+    el.querySelector(".empty")?.remove();
+    Plotly.react(id, traces, layout, PCONF);
+    CHECK.charts[id] = traces.reduce((n, t) => n + ((t.x && t.x.length) || (t.z && t.z.length) || 0), 0);
+  } catch (e) { CHECK.errors.push(id + ": " + e.message); }
+}
+function emptyChart(id, msg) {
+  Plotly.purge(id);
+  const el = document.getElementById(id);
+  el.replaceChildren(Object.assign(document.createElement("div"), { className: "empty", textContent: msg }));
+  CHECK.charts[id] = "empty: " + msg;
 }
 
-function currentFilters() {
-  return {
-    player: playerSel.value,
-    zone: zoneSel.value,
-    period: document.getElementById('periodSel').value,
-    result: document.getElementById('resultSel').value,
-  };
+// direct end-labels: keep at least `gap` (fraction of the y-span) between neighbours
+function spreadLabels(anns, lo, hi, gap = 0.07) {
+  const d = (hi - lo) * gap, sorted = [...anns].sort((a, b) => a.y - b.y);
+  for (let i = 1; i < sorted.length; i++) if (sorted[i].y - sorted[i - 1].y < d) sorted[i].y = sorted[i - 1].y + d;
+  return anns;
 }
-
-function filteredShots() {
-  const f = currentFilters();
-  return DATA.shots.filter(s =>
-    (!f.player || s.player_name === f.player) &&
-    (!f.zone || s.shot_zone === f.zone) &&
-    (!f.period || String(s.period) === f.period) &&
-    (f.result === '' || String(s.shot_made) === f.result)
-  );
-}
-
-function drawCourt() {
-  const shots = filteredShots();
-  Plotly.newPlot('courtChart', [{
-    type: 'scattergl',
-    mode: 'markers',
-    x: shots.map(s => s.loc_x),
-    y: shots.map(s => s.loc_y),
-    marker: {
-      size: 6,
-      color: shots.map(s => s.predicted_prob),
-      colorscale: [[0, '#f87171'], [0.5, '#facc15'], [1, '#34d399']],
-      cmin: 0, cmax: 0.9,
-      colorbar: { title: 'P(make)', thickness: 12, tickfont: { color: '#e8ebf7', size: 10 } },
-      line: { width: 0.5, color: 'rgba(0,0,0,0.4)' },
-      symbol: shots.map(s => s.shot_made ? 'circle' : 'x'),
-    },
-    text: shots.map(s => `${s.player_name}<br>${s.shot_zone} (${s.shot_distance}ft)<br>P(make)=${s.predicted_prob}<br>${s.shot_made ? 'MADE' : 'MISS'}`),
-    hoverinfo: 'text',
-  }], {
-    shapes: courtShapes(),
-    margin: { l: 10, r: 10, t: 4, b: 10 }, height: 480,
-    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-    xaxis: { range: [-27, 27], visible: false },
-    yaxis: { range: [-3, 48], visible: false, scaleanchor: 'x', scaleratio: 1 },
-  }, { displayModeBar: false, responsive: true });
-
-  const made = shots.filter(s => s.shot_made).length;
-  document.getElementById('filterSummary').innerHTML =
-    `<strong>${shots.length.toLocaleString()}</strong> shots shown &middot; ${shots.length ? (100*made/shots.length).toFixed(1) : '0'}% actual FG%`;
-}
-
-[playerSel, zoneSel, document.getElementById('periodSel'), document.getElementById('resultSel')]
-  .forEach(el => el.addEventListener('change', drawCourt));
-drawCourt();
-
-// ---------- player table ----------
-let sortKey = 'makes_over_expected', sortDir = -1;
-function renderPlayerTable() {
-  const rows = DATA.player_report.slice().sort((a,b) => (a[sortKey] - b[sortKey]) * sortDir);
-  document.getElementById('playerTableBody').innerHTML = rows.map(r => `
-    <tr>
-      <td>${r.player_name}</td>
-      <td>${r.team}</td>
-      <td>${r.attempts}</td>
-      <td>${(r.actual_fg_pct*100).toFixed(1)}%</td>
-      <td>${(r.expected_fg_pct*100).toFixed(1)}%</td>
-      <td class="${r.fg_pct_over_expected >= 0 ? 'pos' : 'neg'}">${r.fg_pct_over_expected >= 0 ? '+' : ''}${(r.fg_pct_over_expected*100).toFixed(1)}%</td>
-      <td class="${r.makes_over_expected >= 0 ? 'pos' : 'neg'}">${r.makes_over_expected >= 0 ? '+' : ''}${r.makes_over_expected.toFixed(1)}</td>
-    </tr>`).join('');
-}
-document.querySelectorAll('#playerTable th').forEach(th => {
-  th.addEventListener('click', () => {
-    const key = th.dataset.key;
-    sortDir = (sortKey === key) ? -sortDir : -1;
-    sortKey = key;
-    renderPlayerTable();
+// scatter labels: when two labels would sit on top of each other, push them to opposite sides of their dots
+function declutter(anns, xspan, yspan) {
+  const placed = [];
+  anns.sort((a, b) => b.y - a.y).forEach(a => {
+    const hit = placed.find(p => Math.abs(p.x - a.x) < xspan * 0.16 && Math.abs(p.y - a.y) < yspan * 0.07);
+    if (hit) {
+      if (hit.xanchor !== "left" && hit.xanchor !== "right") Object.assign(hit, { xanchor: "right", xshift: -8, yshift: 0 });
+      Object.assign(a, { xanchor: hit.xanchor === "right" ? "left" : "right", xshift: hit.xanchor === "right" ? 8 : -8, yshift: 0 });
+    }
+    placed.push(a);
   });
-});
-renderPlayerTable();
+  return anns;
+}
+// long season axes: label every other season
+const seasonTicks = seasons => seasons.length > 8 ? { tickvals: seasons.filter((_, i) => i % 2 === 0) } : {};
+const LEGEND_BELOW = () => ({ orientation: "h", x: 0, y: -0.28, yanchor: "top", font: { size: 11.5, color: tok("--text-secondary") } });
+
+// ---------------- tables (textContent only) ----------------
+function renderTable(el, rows, cols, opts = {}) {
+  const table = document.createElement("table");
+  const thead = table.createTHead().insertRow();
+  cols.forEach(c => {
+    const th = document.createElement("th");
+    th.textContent = c.label;
+    if (c.left) th.className = "l";
+    if (opts.onSort && c.sortKey) {
+      th.classList.add("sort");
+      th.setAttribute("aria-sort", opts.sortKey === c.sortKey ? (opts.sortDir > 0 ? "ascending" : "descending") : "none");
+      th.addEventListener("click", () => opts.onSort(c.sortKey));
+    }
+    thead.appendChild(th);
+  });
+  const tb = table.createTBody();
+  rows.forEach(r => {
+    const tr = tb.insertRow();
+    if (opts.onRow) { tr.className = "click"; tr.tabIndex = 0; tr.addEventListener("click", () => opts.onRow(r));
+                      tr.addEventListener("keydown", e => { if (e.key === "Enter") opts.onRow(r); }); }
+    cols.forEach(c => {
+      const td = tr.insertCell();
+      const v = c.get(r);
+      td.textContent = c.fmt ? c.fmt(v, r) : v;
+      if (c.left) td.className = "l";
+      if (c.signed && typeof v === "number") td.classList.add(v >= 0 ? "pos" : "neg");
+    });
+  });
+  const el_ = typeof el === "string" ? document.getElementById(el) : el;
+  el_.replaceChildren(table);
+}
+
+// ---------------- court ----------------
+function arcPts(r, a0, a1, cx = 0, cy = 0, n = 48) {
+  const pts_ = [];
+  for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; pts_.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
+  return pts_;
+}
+const pathOf = p => "M " + p.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(" L ");
+function courtShapes() {
+  const line = { color: tok("--text-muted"), width: 1.2 };
+  const sh = (o) => Object.assign({ line, layer: "above", xref: "x", yref: "y" }, o);
+  const cornerY = Math.sqrt(23.75 ** 2 - 22 ** 2), a0 = Math.atan2(cornerY, 22) * 180 / Math.PI;
+  return [
+    sh({ type: "rect", x0: -25, x1: 25, y0: -5.25, y1: 41.75 }),
+    sh({ type: "rect", x0: -8, x1: 8, y0: -5.25, y1: 13.75 }),
+    sh({ type: "circle", x0: -6, x1: 6, y0: 7.75, y1: 19.75 }),
+    sh({ type: "path", path: pathOf(arcPts(4, 0, 180)) }),
+    sh({ type: "line", x0: -22, x1: -22, y0: -5.25, y1: cornerY }),
+    sh({ type: "line", x0: 22, x1: 22, y0: -5.25, y1: cornerY }),
+    sh({ type: "path", path: pathOf(arcPts(23.75, a0, 180 - a0)) }),
+    sh({ type: "circle", x0: -0.75, x1: 0.75, y0: -0.75, y1: 0.75 }),
+    sh({ type: "line", x0: -3, x1: 3, y0: -1.25, y1: -1.25 }),
+  ];
+}
+function courtLayout(extra = {}) {
+  const hidden = { visible: false, fixedrange: true, showgrid: false, zeroline: false };
+  return baseLayout(Object.assign({
+    margin: { l: 4, r: 4, t: 4, b: 4 }, plot_bgcolor: tok("--surface-1"),
+    xaxis: { ...hidden, range: [-25.5, 25.5] },
+    yaxis: { ...hidden, range: [-6, 41], scaleanchor: "x", scaleratio: 1 },
+    shapes: courtShapes(), height: 470,
+  }, extra));
+}
+
+// ---------------- shots: decode typed columns ----------------
+const SHOTS = {};
+async function decodeShots() {
+  const T = { "<i2": Int16Array, "<u2": Uint16Array, "u1": Uint8Array };
+  await Promise.all(Object.entries(DATA.shots.columns).map(async ([k, col]) => {
+    const bin = Uint8Array.from(atob(col.data), c => c.charCodeAt(0));
+    const stream = new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"));
+    SHOTS[k] = new T[col.dtype](await new Response(stream).arrayBuffer());
+  }));
+  SHOTS.n = DATA.shots.n;
+}
+
+// ---------------- state ----------------
+const LK = DATA.meta.lookups;
+const state = { season: -1, team: -1, player: -1, opp: -1, family: -1, result: "all", mode: "xfg",
+                scope: "All", zoneGroup: "All zones", minAtt: DATA.leaderboards.min_attempts_default,
+                sortKey: "makes_oe", sortDir: -1, showAll: false, heaves: false };
+const playerIndex = new Map(LK.players.map((p, i) => [p, i]));
+
+function filteredIdx() {
+  const s = SHOTS, out = [];
+  const { season, team, player, opp, family, result } = state;
+  const res = result === "all" ? -1 : +result;
+  for (let i = 0; i < s.n; i++) {
+    if (season >= 0 && s.season[i] !== season) continue;
+    if (team >= 0 && s.team[i] !== team) continue;
+    if (player >= 0 && s.player[i] !== player) continue;
+    if (opp >= 0 && s.opp[i] !== opp) continue;
+    if (family >= 0 && s.family[i] !== family) continue;
+    if (res >= 0 && s.made[i] !== res) continue;
+    out.push(i);
+  }
+  return out;
+}
+const measureOf = (mode, made, xsum, n) => mode === "xfg" ? xsum / n : mode === "fg" ? made / n : (made - xsum) / n;
+function colorSpec(mode, values) {
+  if (mode === "diff") {
+    const a = values.map(Math.abs).filter(isFinite).sort((x, y) => x - y);
+    const m = Math.max(0.03, a[Math.floor(a.length * 0.9)] || 0);   // 90th pct of |value|, symmetric
+    return { colorscale: divScale(), cmin: -m, cmax: m, title: "Actual − xFG", fmt: v => pts(v) + " pts" };
+  }
+  return { colorscale: seqScale(), cmin: XFG_RANGE[0], cmax: XFG_RANGE[1], title: mode === "xfg" ? "xFG%" : "Actual FG%", fmt: v => pct(v) };
+}
+const colorbar = (spec) => ({ title: { text: spec.title, side: "right", font: { size: 11, color: tok("--text-secondary") } },
+  thickness: 10, len: 0.6, outlinewidth: 0, tickfont: { size: 10, color: tok("--text-muted") },
+  tickformat: spec.title === "Actual − xFG" ? "+.0%" : ".0%" });
+
+// ---------------- B. maps ----------------
+function renderMaps() {
+  const idx = filteredIdx(), s = SHOTS, n = idx.length;
+  let made = 0, xsum = 0;
+  for (const i of idx) { made += s.made[i]; xsum += s.xfg[i] / 1000; }
+  const sum = document.getElementById("filterSummary");
+  sum.replaceChildren();
+  [["Shots", int(n)], ["FG%", pct(made / n)], ["xFG%", pct(xsum / n)], ["Actual − xFG", pts((made - xsum) / n) + " pts"],
+   ["Makes over expected", sgn(made - xsum, 1)]].forEach(([k, v]) => {
+    const span = document.createElement("span"); span.append(k + ": ");
+    const b = document.createElement("b"); b.textContent = n ? v : "–"; span.append(b); sum.append(span);
+  });
+  if (!n) { ["zoneChart", "hexChart", "scatterChart", "zoneDeltaChart"].forEach(id => emptyChart(id, "No shots match these filters.")); return; }
+  renderZoneMap(idx);
+  renderHex(idx);
+  renderScatter(idx);
+  renderZoneDelta(idx);
+}
+
+function zoneStats(idx) {
+  const nz = LK.zones.length, att = new Array(nz).fill(0), mk = new Array(nz).fill(0), xs = new Array(nz).fill(0);
+  for (const i of idx) { const z = SHOTS.zone[i]; att[z]++; mk[z] += SHOTS.made[i]; xs[z] += SHOTS.xfg[i] / 1000; }
+  return LK.zones.map((name, z) => ({ name, z, att: att[z], fg: mk[z] / att[z], xfg: xs[z] / att[z], diff: (mk[z] - xs[z]) / att[z] }));
+}
+const MIN_ZONE = 15;
+function renderZoneMap(idx) {
+  const zs = zoneStats(idx), mode = state.mode, G = DATA.zones;
+  const val = zs.map(z => z.att >= MIN_ZONE ? (mode === "xfg" ? z.xfg : mode === "fg" ? z.fg : z.diff) : null);
+  const spec = colorSpec(mode, val.filter(v => v != null));
+  const z2 = G.cells.map(row => row.map(c => val[c]));
+  const txt = G.cells.map(row => row.map(c => { const q = zs[c];
+    return q.att ? `<b>${q.name}</b><br>${int(q.att)} shots<br>FG% ${pct(q.fg)} · xFG% ${pct(q.xfg)}<br>Actual − xFG ${pts(q.diff)} pts` + (q.att < MIN_ZONE ? "<br><i>too few shots to color</i>" : "") : `<b>${q.name}</b><br>no shots`; }));
+  // one direct label per zone at its cell centroid
+  const cx = {}, cy = {}, cn = {};
+  G.cells.forEach((row, yi) => row.forEach((c, xi) => { cx[c] = (cx[c] || 0) + G.x[xi] + 0.5; cy[c] = (cy[c] || 0) + G.y[yi] + 0.5; cn[c] = (cn[c] || 0) + 1; }));
+  const ann = zs.filter(q => q.att >= MIN_ZONE && cn[q.z] && q.name !== "Backcourt").map(q => ({
+    x: cx[q.z] / cn[q.z], y: Math.min(cy[q.z] / cn[q.z], 36), text: spec.fmt(val[q.z]).replace(" pts", ""), showarrow: false,
+    font: { size: 11, color: tok("--text-primary") }, bgcolor: tok("--surface-1"), opacity: 0.85, borderpad: 2 }));
+  const t = { type: "heatmap", x: G.x.map(v => v + 0.5), y: G.y.map(v => v + 0.5), z: z2, text: txt, hovertemplate: "%{text}<extra></extra>",
+    colorscale: spec.colorscale, zmin: spec.cmin, zmax: spec.cmax, colorbar: colorbar(spec), hoverongaps: false };
+  plot("zoneChart", [t], courtLayout({ annotations: ann }));
+  document.getElementById("zoneNote").textContent =
+    mode === "diff" ? "Red = made more than the model expected, blue = fewer. Zones with <15 shots are left blank."
+                    : "Darker = higher probability. Zones with <15 shots are left blank.";
+  renderTable("zoneTable", zs.filter(q => q.att > 0), [
+    { label: "Zone", left: true, get: r => r.name }, { label: "Shots", get: r => r.att, fmt: int },
+    { label: "FG%", get: r => r.fg, fmt: v => pct(v) }, { label: "xFG%", get: r => r.xfg, fmt: v => pct(v) },
+    { label: "Actual − xFG", get: r => r.diff, fmt: v => pts(v), signed: true }]);
+}
+
+function renderHex(idx) {
+  const S = 1.3, sq3 = Math.sqrt(3), bins = new Map(), s = SHOTS;
+  for (const i of idx) {
+    const x = s.x[i] / 10, y = s.y[i] / 10;
+    if (y > 40 || Math.abs(x) > 25.5) continue;
+    let q = (sq3 / 3 * x - y / 3) / S, r = (2 / 3 * y) / S, cxq = q, czr = r, cyv = -q - r;
+    let rx = Math.round(cxq), ry = Math.round(cyv), rz = Math.round(czr);
+    const dx = Math.abs(rx - cxq), dy = Math.abs(ry - cyv), dz = Math.abs(rz - czr);
+    if (dx > dy && dx > dz) rx = -ry - rz; else if (dy <= dz) rz = -rx - ry;
+    const key = rx * 1000 + rz;
+    let b = bins.get(key); if (!b) { b = { q: rx, r: rz, n: 0, m: 0, x: 0 }; bins.set(key, b); }
+    b.n++; b.m += s.made[i]; b.x += s.xfg[i] / 1000;
+  }
+  const minN = Math.max(3, Math.round(idx.length * 0.0004));
+  const hs = [...bins.values()].filter(b => b.n >= minN);
+  if (!hs.length) return emptyChart("hexChart", "Too few shots for a hex map; see individual shots.");
+  const counts = hs.map(b => b.n).sort((a, b) => a - b), ref = counts[Math.floor(counts.length * 0.9)] || 1;
+  const el = document.getElementById("hexChart"), pxPerFt = Math.max(6, (el.clientWidth - 8) / 51);
+  const mode = state.mode, val = hs.map(b => measureOf(mode, b.m, b.x, b.n)), spec = colorSpec(mode, val);
+  const t = { type: "scatter", mode: "markers",
+    x: hs.map(b => S * sq3 * (b.q + b.r / 2)), y: hs.map(b => S * 1.5 * b.r),
+    marker: { symbol: "hexagon", size: hs.map(b => pxPerFt * S * sq3 * 1.05 * Math.max(0.3, Math.min(1, Math.sqrt(b.n / ref)))),
+      color: val, colorscale: spec.colorscale, cmin: spec.cmin, cmax: spec.cmax, colorbar: colorbar(spec), line: { width: 0 } },
+    customdata: hs.map(b => [b.n, b.m / b.n, b.x / b.n, (b.m - b.x) / b.n]),
+    hovertemplate: "%{customdata[0]:,} shots<br>FG% %{customdata[1]:.1%} · xFG% %{customdata[2]:.1%}<br>Actual − xFG %{customdata[3]:+.1%}<extra></extra>" };
+  plot("hexChart", [t], courtLayout());
+}
+
+const SCATTER_MAX = 4000;
+function renderScatter(idx) {
+  const note = document.getElementById("scatterNote");
+  if (idx.length > SCATTER_MAX) {
+    note.textContent = "Filled = made, hollow = missed, color = xFG%.";
+    return emptyChart("scatterChart", `${int(idx.length)} shots selected. Pick a player (or narrow the filters to ≤ ${int(SCATTER_MAX)}) to see individual shots.`);
+  }
+  note.textContent = `${int(idx.length)} shots. Filled = made, hollow = missed, color = xFG%.`;
+  const s = SHOTS, spec = colorSpec("xfg", []);
+  const trace = (madeFlag, name, symbol) => {
+    const ii = idx.filter(i => s.made[i] === madeFlag);
+    return { type: "scattergl", mode: "markers", name,
+      x: ii.map(i => s.x[i] / 10), y: ii.map(i => s.y[i] / 10),
+      marker: { symbol, size: 8, color: ii.map(i => s.xfg[i] / 1000), colorscale: spec.colorscale, cmin: spec.cmin, cmax: spec.cmax,
+        line: { width: madeFlag ? 0.5 : 1.8, color: madeFlag ? tok("--surface-1") : undefined },
+        colorbar: madeFlag ? colorbar(spec) : undefined, showscale: !!madeFlag },
+      customdata: ii.map(i => { const c = s.clock[i], p = c >> 10, sec = c & 1023;
+        return [LK.players[s.player[i]], LK.teams[s.opp[i]], dateStr(LK.dates[s.date[i]]), LK.actions[s.action[i]],
+                clockStr(p, Math.floor(sec / 60), sec % 60), s.xfg[i] / 1000, s.dist[i]]; }),
+      hovertemplate: `<b>${name}</b> · xFG %{customdata[5]:.1%}<br>%{customdata[0]} vs %{customdata[1]}<br>%{customdata[3]}, %{customdata[6]} ft<br>%{customdata[2]} · %{customdata[4]}<extra></extra>` };
+  };
+  plot("scatterChart", [trace(0, "Missed", "circle-open"), trace(1, "Made", "circle")],
+       courtLayout({ showlegend: true, legend: { orientation: "h", x: 0, y: 1.02, font: { size: 11.5, color: tok("--text-secondary") } } }));
+}
+
+function renderZoneDelta(idx) {
+  const zs = zoneStats(idx).filter(q => q.att >= MIN_ZONE).sort((a, b) => a.diff - b.diff);
+  const who = state.player >= 0 ? LK.players[state.player] : state.team >= 0 ? LK.teams[state.team] : "the selection";
+  document.getElementById("zoneDeltaTitle").textContent = `Where ${who} beats the model`;
+  if (!zs.length) return emptyChart("zoneDeltaChart", "No zone has 15+ shots in this selection.");
+  const t = { type: "bar", orientation: "h", y: zs.map(q => q.name), x: zs.map(q => q.diff),
+    marker: { color: zs.map(q => q.diff >= 0 ? tok("--hot") : tok("--cold")), line: { width: 0 } },
+    text: zs.map(q => pts(q.diff)), textposition: "outside", cliponaxis: false, textfont: { size: 11, color: tok("--text-secondary") },
+    customdata: zs.map(q => [q.att, q.fg, q.xfg]),
+    hovertemplate: "<b>%{y}</b><br>%{customdata[0]:,} shots<br>FG% %{customdata[1]:.1%} · xFG% %{customdata[2]:.1%}<br>Actual − xFG %{x:+.1%}<extra></extra>" };
+  const m = Math.max(0.02, ...zs.map(q => Math.abs(q.diff))) * 1.35;
+  plot("zoneDeltaChart", [t], baseLayout({ height: 440, bargap: 0.35, margin: { l: 130, r: 20, t: 6, b: 36 },
+    xaxis: { ...baseLayout().xaxis, range: [-m, m], tickformat: "+.0%", zeroline: true, zerolinewidth: 1.5, title: { text: "Actual FG% − xFG%" } },
+    yaxis: { ...baseLayout().yaxis, gridcolor: "rgba(0,0,0,0)" } }));
+}
+
+// ---------------- A. training ----------------
+function renderTraining() {
+  const T = DATA.training, M = T.metrics;
+  // tiles
+  const ov = M.online_overall, tiles = document.getElementById("tiles");
+  const tile = (label, value, cmp) => { const d = document.createElement("div"); d.className = "card tile";
+    [["label", label], ["value", value], ["cmp", cmp]].forEach(([c, t]) => { const e = document.createElement("div"); e.className = c; e.textContent = t; d.append(e); });
+    return d; };
+  const dashN = DATA.shots.n;
+  tiles.replaceChildren(
+    tile("Held-out log loss (weekly-updated)", ov.xfg.log_loss.toFixed(4), `frozen ${ov.xfg_frozen.log_loss.toFixed(4)} · zone average ${ov.xfg_zone.log_loss.toFixed(4)}`),
+    tile("Held-out AUC", ov.xfg.auc.toFixed(3), `frozen ${ov.xfg_frozen.auc.toFixed(3)} · zone average ${ov.xfg_zone.auc.toFixed(3)}`),
+    tile("Calibration, worst bin", pts(M.calibration.max_abs_gap) + " pts", "gap between predicted and actual make rate"),
+    tile("Shots on this dashboard", int(dashN), `${DATA.meta.seasons.join(" & ")} · trained on ${T.split.train[0]}–${T.split.stop}`));
+
+  // coverage by role
+  const roles = [["train", "Train", "--series-1"], ["early-stop", "Early-stop", "--series-2"], ["walk-forward", "Walk-forward", "--series-3"]];
+  const cov = T.coverage;
+  const covTraces = roles.map(([key, name, c]) => { const rs = cov.filter(r => r.role === key);
+    return { type: "bar", name, x: rs.map(r => r.season), y: rs.map(r => r.shots), marker: { color: tok(c), line: { width: 0 } },
+      customdata: rs.map(r => [r.games, r.fg_pct, r.dropped_no_location, r.on_dashboard ? "on this dashboard" : ""]),
+      hovertemplate: `<b>%{x}</b> · ${name}<br>%{y:,} shots · %{customdata[0]} games<br>FG% %{customdata[1]:.1%} · dropped %{customdata[2]}<br>%{customdata[3]}<extra></extra>` }; });
+  const dashAnn = cov.filter(r => r.on_dashboard).map(r => ({ x: r.season, y: r.shots, yshift: 10, text: "shown", showarrow: false,
+    font: { size: 10.5, color: tok("--text-secondary") } }));
+  plot("coverageChart", covTraces, baseLayout({ barmode: "overlay", bargap: 0.25, showlegend: true, annotations: dashAnn,
+    margin: { l: 56, r: 10, t: 30, b: 50 }, yaxis: { ...baseLayout().yaxis, tickformat: ".2s", rangemode: "tozero" },
+    xaxis: { ...baseLayout().xaxis, tickangle: -45, type: "category", gridcolor: "rgba(0,0,0,0)" } }));
+  renderTable("coverageTable", cov, [
+    { label: "Season", left: true, get: r => r.season }, { label: "Role", left: true, get: r => r.role },
+    { label: "Shots", get: r => r.shots, fmt: int }, { label: "Games", get: r => r.games, fmt: int },
+    { label: "FG%", get: r => r.fg_pct, fmt: v => pct(v) }, { label: "3PA rate", get: r => r.three_rate, fmt: v => pct(v) },
+    { label: "Dropped (no location)", get: r => r.dropped_no_location, fmt: int }]);
+
+  // learning curve: 3 series, legend + end labels
+  // insert a null between seasons so the off-season isn't drawn as a straight line
+  const lc = [];
+  T.learning_curve.forEach((r, i, a) => { if (i && r.season !== a[i - 1].season) lc.push({ gap: true, chunk_min_date: r.chunk_min_date, season: r.season }); lc.push(r); });
+  const x = lc.map(r => dateStr(String(r.chunk_min_date)));
+  const series = [["xfg_log_loss_roll", "Weekly-updated", "--series-1"], ["xfg_frozen_log_loss_roll", "Frozen", "--series-2"],
+                  ["xfg_zone_log_loss_roll", "Zone average", "--series-3"]];
+  const curve = series.map(([k, name, c]) => ({ type: "scatter", mode: "lines", name, x, y: lc.map(r => r[k]),
+    line: { color: tok(c), width: 2 }, connectgaps: false, hovertemplate: `${name} %{y:.4f}<extra></extra>` }));
+  const last = lc[lc.length - 1];
+  const allY = lc.flatMap(r => series.map(([k]) => r[k])).filter(v => v != null);
+  const endAnn = spreadLabels(series.map(([k, name]) => ({ x: x[x.length - 1], y: last[k], xanchor: "left", xshift: 6, text: name, showarrow: false,
+    font: { size: 11, color: tok("--text-secondary") } })), Math.min(...allY), Math.max(...allY));
+  // season boundaries
+  const firstOf = {}; lc.forEach((r, i) => { if (!r.gap && !(r.season in firstOf)) firstOf[r.season] = x[i]; });
+  const seasonLines = Object.entries(firstOf).slice(1).map(([s, d]) => ({ type: "line", x0: d, x1: d, yref: "paper", y0: 0, y1: 1, line: { color: tok("--grid"), width: 1 } }));
+  const seasonAnn = Object.entries(firstOf).map(([s, d]) => ({ x: d, yref: "paper", y: 1.0, xanchor: "left", yanchor: "bottom", text: s, showarrow: false, font: { size: 10.5, color: tok("--text-muted") } }));
+  plot("curveChart", curve, baseLayout({ hovermode: "x unified", showlegend: true, annotations: [...endAnn, ...seasonAnn], shapes: seasonLines,
+    margin: { l: 56, r: 100, t: 22, b: 40 }, legend: LEGEND_BELOW(), height: 320,
+    yaxis: { ...baseLayout().yaxis, title: { text: "Log loss" }, tickformat: ".3f" } }));
+
+  // season metrics
+  const sm = Object.entries(M.online_by_season).map(([s, v]) => ({ s, ...v }));
+  const smCols = [
+    { label: "Season", left: true, get: r => r.s + (DATA.meta.seasons.includes(r.s) ? " (shown)" : "") },
+    { label: "Shots", get: r => r.n, fmt: int }, { label: "FG%", get: r => r.actual_fg, fmt: v => pct(v) },
+    { label: "Mean xFG%", get: r => r.mean_xfg, fmt: v => pct(v) },
+    { label: "Weekly", get: r => r.xfg.log_loss, fmt: v => v.toFixed(4) }, { label: "Frozen", get: r => r.xfg_frozen.log_loss, fmt: v => v.toFixed(4) },
+    { label: "Zone avg", get: r => r.xfg_zone.log_loss, fmt: v => v.toFixed(4) }, { label: "AUC", get: r => r.xfg.auc, fmt: v => v.toFixed(3) }];
+  renderTable("seasonMetricsTable", sm, smCols);
+  renderTable("seasonMetricsTable2", sm, smCols);
+
+  // trends (separate charts: never dual-axis)
+  const trend = (id, key, title) => plot(id, [{ type: "scatter", mode: "lines+markers", x: cov.map(r => r.season), y: cov.map(r => r[key]),
+    line: { color: tok("--series-1"), width: 2 }, marker: { size: 8, color: tok("--series-1"), line: { width: 2, color: tok("--surface-1") } },
+    hovertemplate: `<b>%{x}</b><br>${title} %{y:.1%}<extra></extra>` }],
+    baseLayout({ margin: { l: 48, r: 10, t: 10, b: 50 }, xaxis: { ...baseLayout().xaxis, tickangle: -45, type: "category", gridcolor: "rgba(0,0,0,0)", ...seasonTicks(cov.map(r => r.season)) },
+                 yaxis: { ...baseLayout().yaxis, tickformat: ".1%" } }));
+  trend("fgTrendChart", "fg_pct", "FG%");
+  trend("threeTrendChart", "three_rate", "3PA rate");
+
+  const mixColors = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5"];
+  const mixSeasons = [...new Set(T.zone_mix.map(r => r.SEASON))];
+  const mix = T.zone_groups.map((g, i) => { const rs = T.zone_mix.filter(r => r.zone_group === g);
+    return { type: "scatter", mode: "lines", name: g, x: rs.map(r => r.SEASON), y: rs.map(r => r.share), line: { color: tok(mixColors[i]), width: 2 },
+      hovertemplate: `${g} %{y:.1%}<extra></extra>` }; });
+  const shares = T.zone_mix.map(r => r.share);
+  const mixEnd = spreadLabels(T.zone_groups.map((g, i) => { const rs = T.zone_mix.filter(r => r.zone_group === g); const r = rs[rs.length - 1];
+    return { x: r.SEASON, y: r.share, xanchor: "left", xshift: 5, text: g, showarrow: false, font: { size: 10.5, color: tok("--text-secondary") } }; }),
+    0, Math.max(...shares), 0.09);
+  plot("mixChart", mix, baseLayout({ hovermode: "x unified", showlegend: true, annotations: mixEnd, margin: { l: 44, r: 96, t: 10, b: 50 },
+    height: 330, legend: { ...LEGEND_BELOW(), y: -0.38 },
+    xaxis: { ...baseLayout().xaxis, tickangle: -45, type: "category", gridcolor: "rgba(0,0,0,0)", categoryarray: mixSeasons, ...seasonTicks(mixSeasons) },
+    yaxis: { ...baseLayout().yaxis, tickformat: ".0%", rangemode: "tozero" } }));
+  renderTable("mixTable", T.zone_mix, [{ label: "Season", left: true, get: r => r.SEASON }, { label: "Zone group", left: true, get: r => r.zone_group },
+    { label: "Share of shots", get: r => r.share, fmt: v => pct(v) }, { label: "FG%", get: r => r.fg_pct, fmt: v => pct(v) }]);
+
+  // calibration
+  const cal = M.calibration, calRows = cal.predicted_mean_by_bin.map((p, i) => ({ p, a: cal.actual_frac_by_bin[i] }));
+  const lo = Math.min(...cal.predicted_mean_by_bin, ...cal.actual_frac_by_bin) - 0.03, hi = Math.max(...cal.predicted_mean_by_bin, ...cal.actual_frac_by_bin) + 0.03;
+  plot("calChart", [
+    { type: "scatter", mode: "lines", x: [lo, hi], y: [lo, hi], line: { color: tok("--axis"), width: 1.5 }, hoverinfo: "skip" },
+    { type: "scatter", mode: "lines+markers", x: calRows.map(r => r.p), y: calRows.map(r => r.a), line: { color: tok("--series-1"), width: 2 },
+      marker: { size: 9, color: tok("--series-1"), line: { width: 2, color: tok("--surface-1") } },
+      hovertemplate: "predicted %{x:.1%}<br>actual %{y:.1%}<extra></extra>" }],
+    baseLayout({ margin: { l: 52, r: 10, t: 10, b: 44 },
+      xaxis: { ...baseLayout().xaxis, tickformat: ".0%", title: { text: "Predicted (xFG%)" }, range: [lo, hi] },
+      yaxis: { ...baseLayout().yaxis, tickformat: ".0%", title: { text: "Actual FG%" }, range: [lo, hi] } }));
+  renderTable("calTable", calRows, [{ label: "Bin", left: true, get: r => calRows.indexOf(r) + 1 },
+    { label: "Predicted", get: r => r.p, fmt: v => pct(v) }, { label: "Actual", get: r => r.a, fmt: v => pct(v) },
+    { label: "Gap (pts)", get: r => r.a - r.p, fmt: v => pts(v), signed: true }]);
+
+  // importance
+  const imp = T.feature_importance.slice(0, 15).reverse();
+  const nice = f => f.replace(/^action_/, "shot type: ").replace(/^zone_/, "zone: ").replace(/^area_/, "area: ").replace(/_/g, " ");
+  plot("impChart", [{ type: "bar", orientation: "h", y: imp.map(r => nice(r.feature)), x: imp.map(r => r.gain),
+    marker: { color: tok("--series-1"), line: { width: 0 } }, hovertemplate: "%{y}<br>gain %{x:,.0f}<extra></extra>" }],
+    baseLayout({ height: 400, bargap: 0.3, margin: { l: 150, r: 12, t: 6, b: 36 }, yaxis: { ...baseLayout().yaxis, gridcolor: "rgba(0,0,0,0)" },
+                 xaxis: { ...baseLayout().xaxis, title: { text: "Gain" } } }));
+  renderTable("impTable", T.feature_importance, [{ label: "Feature", left: true, get: r => nice(r.feature) }, { label: "Gain", get: r => r.gain, fmt: v => v.toFixed(1) }]);
+}
+
+// ---------------- C. outliers ----------------
+function boardRows() {
+  const B = DATA.leaderboards.boards[state.scope];
+  const teamOf = new Map(B.players.map(p => [p.PLAYER_NAME, p.team]));
+  const rows = state.zoneGroup === "All zones" ? B.players
+    : B.players_by_zone.filter(r => r.zone_group === state.zoneGroup).map(r => ({ ...r, team: teamOf.get(r.PLAYER_NAME) }));
+  return rows.filter(r => r.attempts >= state.minAtt);
+}
+function selectPlayer(name) {
+  const i = playerIndex.get(name);
+  if (i == null) return;
+  state.player = i; state.team = -1;
+  document.getElementById("fPlayer").value = name; document.getElementById("fTeam").value = "-1";
+  renderMaps();
+  document.getElementById("maps").scrollIntoView({ behavior: "smooth" });
+}
+function renderBoards() {
+  const rows = boardRows();
+  document.getElementById("bMinVal").textContent = int(state.minAtt);
+  const sorted = [...rows].sort((a, b) => state.sortDir * ((a[state.sortKey] ?? -1e9) - (b[state.sortKey] ?? -1e9)));
+  const shown = state.showAll ? sorted : sorted.slice(0, 25);
+  const more = document.getElementById("boardMore");
+  more.textContent = sorted.length > 25 ? (state.showAll ? "Show top 25" : `Show all ${sorted.length}`) : "";
+  const onSort = k => { state.sortDir = state.sortKey === k ? -state.sortDir : -1; state.sortKey = k; renderBoards(); };
+  renderTable("boardTable", shown, [
+    { label: "#", get: r => sorted.indexOf(r) + 1 }, { label: "Player", left: true, get: r => r.PLAYER_NAME },
+    { label: "Team", left: true, get: r => r.team || "" },
+    { label: "FGA", get: r => r.attempts, fmt: int, sortKey: "attempts" }, { label: "FG%", get: r => r.fg_pct, fmt: v => pct(v), sortKey: "fg_pct" },
+    { label: "xFG%", get: r => r.xfg_pct, fmt: v => pct(v), sortKey: "xfg_pct" },
+    { label: "FG% − xFG%", get: r => r.fg_oe, fmt: v => pts(v), signed: true, sortKey: "fg_oe" },
+    { label: "Makes over exp.", get: r => r.makes_oe, fmt: v => sgn(v), signed: true, sortKey: "makes_oe" },
+    { label: "z", get: r => r.z, fmt: v => sgn(v, 1), signed: true, sortKey: "z" }],
+    { onSort, sortKey: state.sortKey, sortDir: state.sortDir, onRow: r => selectPlayer(r.PLAYER_NAME) });
+
+  const qCols = [{ label: "Player", left: true, get: r => r.PLAYER_NAME }, { label: "Team", left: true, get: r => r.team || "" },
+    { label: "FGA", get: r => r.attempts, fmt: int }, { label: "xFG%", get: r => r.xfg_pct, fmt: v => pct(v) },
+    { label: "Avg dist", get: r => r.avg_dist, fmt: v => v == null ? "–" : v.toFixed(1) + " ft" }, { label: "FG% − xFG%", get: r => r.fg_oe, fmt: v => pts(v), signed: true }];
+  const byQ = [...rows].sort((a, b) => b.xfg_pct - a.xfg_pct);
+  renderTable("qualityTop", byQ.slice(0, 10), qCols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+  renderTable("qualityBottom", byQ.slice(-10).reverse(), qCols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+
+  if (rows.length < 3) { emptyChart("quadChart", "Not enough players at this minimum."); emptyChart("luckChart", "Not enough players at this minimum."); }
+  else { renderQuad(rows); renderLuck(rows); }
+
+  const B = DATA.leaderboards.boards[state.scope];
+  const tCols = [{ label: "Team", left: true, get: r => r.team }, { label: "FGA", get: r => r.attempts, fmt: int },
+    { label: "FG%", get: r => r.fg_pct, fmt: v => pct(v) }, { label: "xFG%", get: r => r.xfg_pct, fmt: v => pct(v) },
+    { label: "FG% − xFG%", get: r => r.fg_oe, fmt: v => pts(v), signed: true }, { label: "Makes over exp.", get: r => r.makes_oe, fmt: v => sgn(v), signed: true }];
+  renderTable("teamOff", B.team_offense, tCols);
+  renderTable("teamDef", B.team_defense, tCols.map(c => c.signed ? { ...c, signed: false, fmt: c.fmt } : c));
+}
+const median = a => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+function renderQuad(rows) {
+  const mx = median(rows.map(r => r.xfg_pct)), my = median(rows.map(r => r.fg_oe));
+  const maxA = Math.max(...rows.map(r => r.attempts));
+  const label = new Set([...rows].sort((a, b) => b.makes_oe - a.makes_oe).slice(0, 5).map(r => r.PLAYER_NAME)
+    .concat([...rows].sort((a, b) => a.makes_oe - b.makes_oe).slice(0, 3).map(r => r.PLAYER_NAME)));
+  const t = { type: "scatter", mode: "markers", x: rows.map(r => r.xfg_pct), y: rows.map(r => r.fg_oe),
+    marker: { size: rows.map(r => 6 + 12 * Math.sqrt(r.attempts / maxA)), color: tok("--series-1"), opacity: 0.75, line: { width: 1.5, color: tok("--surface-1") } },
+    customdata: rows.map(r => [r.PLAYER_NAME, r.team || "", r.attempts, r.fg_pct]),
+    hovertemplate: "<b>%{customdata[0]}</b> %{customdata[1]}<br>%{customdata[2]:,} FGA<br>xFG% %{x:.1%} · FG% %{customdata[3]:.1%}<br>FG% − xFG% %{y:+.1%}<extra></extra>" };
+  const xs = rows.map(r => r.xfg_pct), ys = rows.map(r => r.fg_oe);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const padx = (x1 - x0) * 0.08, pady = (y1 - y0) * 0.1;
+  const ann = declutter(rows.filter(r => label.has(r.PLAYER_NAME)).map(r => ({ x: r.xfg_pct, y: r.fg_oe, text: r.PLAYER_NAME, showarrow: false,
+    yshift: 12, font: { size: 10.5, color: tok("--text-primary") } })), x1 - x0, y1 - y0);
+  const corner = (x, y, text, xa, ya) => ({ x, y, text, showarrow: false, xanchor: xa, yanchor: ya, font: { size: 10.5, color: tok("--text-muted") } });
+  ann.push(corner(x1 + padx, y1 + pady, "easy shots, made more", "right", "top"), corner(x0 - padx, y1 + pady, "hard shots, made more", "left", "top"),
+           corner(x1 + padx, y0 - pady, "easy shots, made fewer", "right", "bottom"), corner(x0 - padx, y0 - pady, "hard shots, made fewer", "left", "bottom"));
+  const ml = { color: tok("--axis"), width: 1 };
+  plot("quadChart", [t], baseLayout({ height: 420, annotations: ann, margin: { l: 56, r: 14, t: 10, b: 44 },
+    shapes: [{ type: "line", x0: mx, x1: mx, yref: "paper", y0: 0, y1: 1, line: ml }, { type: "line", y0: my, y1: my, xref: "paper", x0: 0, x1: 1, line: ml }],
+    xaxis: { ...baseLayout().xaxis, tickformat: ".0%", title: { text: "Shot quality (avg xFG%)" }, range: [x0 - padx, x1 + padx] },
+    yaxis: { ...baseLayout().yaxis, tickformat: "+.0%", title: { text: "Shot-making (FG% − xFG%)" }, range: [y0 - pady, y1 + pady] } }));
+  const quadChartEl = document.getElementById("quadChart");
+  quadChartEl.removeAllListeners?.("plotly_click");
+  quadChartEl.on?.("plotly_click", ev => selectPlayer(ev.points[0].customdata[0]));
+}
+function renderLuck(rows) {
+  const p = rows.reduce((s, r) => s + r.xfg_pct * r.attempts, 0) / rows.reduce((s, r) => s + r.attempts, 0);
+  const maxA = Math.max(...rows.map(r => r.attempts)) * 1.05, nx = 60;
+  const bx = Array.from({ length: nx + 1 }, (_, i) => maxA * i / nx), band = bx.map(n => 2 * Math.sqrt(n * p * (1 - p)));
+  const groups = [["Beyond +2σ (hot)", r => r.z > 2, "--hot"], ["Within ±2σ", r => Math.abs(r.z) <= 2, "--muted-mark"], ["Beyond −2σ (cold)", r => r.z < -2, "--cold"]];
+  const traces = [
+    { type: "scatter", mode: "lines", x: bx, y: band, line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    { type: "scatter", mode: "lines", x: bx, y: band.map(v => -v), fill: "tonexty", fillcolor: isDark() ? "rgba(255,255,255,0.06)" : "rgba(11,11,11,0.05)",
+      line: { width: 0 }, hoverinfo: "skip", showlegend: false },
+    ...groups.map(([name, f, c]) => { const rs = rows.filter(f);
+      return { type: "scatter", mode: "markers", name, x: rs.map(r => r.attempts), y: rs.map(r => r.makes_oe),
+        marker: { size: 8, color: tok(c), line: { width: 1.5, color: tok("--surface-1") } },
+        customdata: rs.map(r => [r.PLAYER_NAME, r.team || "", r.z]),
+        hovertemplate: "<b>%{customdata[0]}</b> %{customdata[1]}<br>%{x:,} FGA · makes over exp. %{y:+.1f}<br>z %{customdata[2]:+.1f}<extra></extra>" }; })];
+  const top = [...rows].sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 5);
+  const moe = rows.map(r => r.makes_oe);
+  const ann = declutter(top.map(r => ({ x: r.attempts, y: r.makes_oe, text: r.PLAYER_NAME, showarrow: false, yshift: r.makes_oe >= 0 ? 12 : -12,
+    font: { size: 10.5, color: tok("--text-primary") } })), maxA, Math.max(...moe) - Math.min(...moe));
+  plot("luckChart", traces, baseLayout({ height: 420, showlegend: true, annotations: ann, margin: { l: 56, r: 14, t: 30, b: 44 },
+    xaxis: { ...baseLayout().xaxis, title: { text: "Attempts" }, rangemode: "tozero" },
+    yaxis: { ...baseLayout().yaxis, title: { text: "Makes over expected" }, zeroline: true } }));
+  const luckChartEl = document.getElementById("luckChart");
+  luckChartEl.removeAllListeners?.("plotly_click");
+  luckChartEl.on?.("plotly_click", ev => ev.points[0].customdata && selectPlayer(ev.points[0].customdata[0]));
+}
+function renderOutliers() {
+  const O = DATA.outliers;
+  const cols = [{ label: "Player", left: true, get: r => r.PLAYER_NAME }, { label: "Team", left: true, get: r => `${r.team} vs ${r.opp}` },
+    { label: "Date", get: r => dateStr(String(r.GAME_DATE)) }, { label: "Clock", get: r => clockStr(r.PERIOD, r.MINUTES_REMAINING, r.SECONDS_REMAINING) },
+    { label: "Shot", left: true, get: r => r.ACTION_TYPE }, { label: "Dist", get: r => r.SHOT_DISTANCE + " ft" }, { label: "xFG%", get: r => r.xfg, fmt: v => pct(v) }];
+  renderTable("toughTable", (state.heaves ? O.toughest_makes : O.toughest_makes_no_heaves).slice(0, 15), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+  renderTable("easyTable", O.easiest_misses.slice(0, 15), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+}
+
+// ---------------- controls ----------------
+function fillSelect(id, items, allLabel) {
+  const el = document.getElementById(id);
+  el.replaceChildren(new Option(allLabel, "-1"), ...items.map((t, i) => new Option(t, String(i))));
+}
+function initControls() {
+  fillSelect("fSeason", LK.seasons, "Both seasons");
+  fillSelect("fTeam", LK.teams, "All teams");
+  fillSelect("fOpp", LK.teams, "All opponents");
+  fillSelect("fFamily", LK.families, "All shot types");
+  document.getElementById("playerList").replaceChildren(...LK.players.map(p => new Option(p)));
+  const bind = (id, key) => document.getElementById(id).addEventListener("change", e => { state[key] = +e.target.value; renderMaps(); });
+  bind("fSeason", "season"); bind("fTeam", "team"); bind("fOpp", "opp"); bind("fFamily", "family");
+  document.getElementById("fResult").addEventListener("change", e => { state.result = e.target.value; renderMaps(); });
+  const fp = document.getElementById("fPlayer");
+  fp.addEventListener("change", () => { const i = playerIndex.get(fp.value); state.player = i == null ? -1 : i; if (i == null) fp.value = ""; renderMaps(); });
+  document.getElementById("fPlayerClear").addEventListener("click", () => { fp.value = ""; state.player = -1; renderMaps(); });
+  document.querySelectorAll("#fMode button").forEach(b => b.addEventListener("click", () => {
+    state.mode = b.dataset.mode; document.querySelectorAll("#fMode button").forEach(o => o.setAttribute("aria-pressed", String(o === b))); renderMaps(); }));
+
+  const scope = document.getElementById("bScope");
+  scope.replaceChildren(...DATA.leaderboards.scopes.map(s => new Option(s === "All" ? "Both seasons" : s, s)));
+  scope.addEventListener("change", e => { state.scope = e.target.value; renderBoards(); });
+  const zg = document.getElementById("bZone");
+  zg.replaceChildren(...["All zones", ...DATA.training.zone_groups].map(z => new Option(z, z)));
+  zg.addEventListener("change", e => { state.zoneGroup = e.target.value; state.minAtt = e.target.value === "All zones" ? Math.max(state.minAtt, 100) : Math.min(state.minAtt, 150);
+    document.getElementById("bMin").value = state.minAtt; renderBoards(); });
+  const mn = document.getElementById("bMin"); mn.value = state.minAtt;
+  mn.addEventListener("input", e => { state.minAtt = +e.target.value; renderBoards(); });
+  document.getElementById("boardMore").addEventListener("click", () => { state.showAll = !state.showAll; renderBoards(); });
+  document.getElementById("heaves").addEventListener("change", e => { state.heaves = e.target.checked; renderOutliers(); });
+
+  // theme: system -> light -> dark
+  const btn = document.getElementById("themeBtn");
+  let pref = "system"; try { pref = localStorage.getItem("xfg-theme") || "system"; } catch (e) {}
+  const q = new URLSearchParams(location.search).get("theme");   // ?theme=light|dark overrides
+  if (["light", "dark", "system"].includes(q)) pref = q;
+  const apply = () => { if (pref === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = pref;
+    btn.textContent = "Theme: " + pref; };
+  apply();
+  btn.addEventListener("click", () => { pref = { system: "light", light: "dark", dark: "system" }[pref];
+    try { localStorage.setItem("xfg-theme", pref); } catch (e) {} apply(); renderAll(); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (pref === "system") renderAll(); });
+  let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => renderHex(filteredIdx()), 200); });
+}
+
+function applyUrlFilters() {   // ?player=Name deep link
+  const name = new URLSearchParams(location.search).get("player");
+  const i = name == null ? undefined : playerIndex.get(name);
+  if (i != null) { state.player = i; document.getElementById("fPlayer").value = name; }
+}
+
+function renderAll() { renderTraining(); renderMaps(); renderBoards(); renderOutliers(); }
+
+(async function main() {
+  const m = DATA.meta;
+  document.getElementById("subtitle").textContent =
+    `Held-out walk-forward predictions · ${m.seasons.join(" & ")} regular seasons`;
+  if (m.synthetic) document.getElementById("subtitle").append(Object.assign(document.createElement("span"), { className: "badge warn", textContent: "synthetic data" }));
+  document.getElementById("footer").textContent = `Generated ${m.generated}. Data: stats.nba.com shot charts. xFG% is shooter-blind and each value was predicted before the model trained on that shot.`;
+  try {
+    await decodeShots();
+    initControls();
+    applyUrlFilters();
+    renderAll();
+  } catch (e) { CHECK.errors.push("init: " + e.message); }
+  document.getElementById("selfcheck").textContent = JSON.stringify(CHECK);
+  document.body.dataset.ready = "1";
+})();
 </script>
 </body>
 </html>

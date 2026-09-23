@@ -8,6 +8,7 @@ data/raw/
 data/synthetic/
 data/*.parquet
 data/*.csv
+data/*.json
 
 # models: keep metrics, ignore boosters and synthetic runs
 models/*.json

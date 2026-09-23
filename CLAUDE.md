@@ -5,7 +5,7 @@ trained on early seasons and updated walk-forward (weekly) through recent ones.
 
 ## Workflow — synthetic first, real second
 - **Fast loop, after every edit:** `python run_pipeline.py --synthetic`
-  (generate → features → train → pytest; seconds, no network). Must be green before anything else.
+  (generate → features → train → dashboard → pytest; ~30 s, no network). Must be green before anything else.
 - **Slow loop:** `python fetch_data.py [--seasons 2025-26 ...]` pulls real data. Only run it when
   the synthetic loop is green, and **never to "verify" a code change** — it is slow, rate-limited,
   and burns NBA API goodwill. `run_pipeline.py` never fetches.
@@ -42,4 +42,8 @@ trained on early seasons and updated walk-forward (weekly) through recent ones.
     → fetch per team (30 calls/season, ~105 s) and validate by game count (1230; 1059 for 2019-20 incl. bubble seeding games,
     1080 for 2020-21) + last game in April. Bump `VALIDATOR_VERSION` when validation tightens.
 - `features.py`, `split.py`, `train_model.py` — model pipeline.
-- `dashboard/`, `build_dashboard_data.py` — legacy, to be rebuilt on the last 2 seasons later.
+- `build_dashboard_data.py` — payload for the last `DASHBOARD_SEASONS` walk-forward seasons (shots as
+  gzip+base64 typed columns, leaderboards, outliers, training history) embedded into
+  `dashboard/dashboard_template.html` → `dashboard/dashboard.html` (real) / `dashboard_synthetic.html`.
+  Built HTML is gitignored. Page self-check: headless Chrome `--dump-dom` → `<pre id="selfcheck">` JSON
+  (errors + per-chart point counts); `?theme=light|dark&player=Name` for screenshots.
