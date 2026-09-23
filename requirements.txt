@@ -2,5 +2,6 @@ pandas>=2.0
 numpy>=1.24
 scikit-learn>=1.3
 xgboost>=2.0
-# optional, for pulling live data instead of the synthetic generator:
-# nba_api>=1.4
+pyarrow>=14
+nba_api>=1.4
+pytest>=8

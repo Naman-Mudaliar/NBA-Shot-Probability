@@ -1,25 +1,24 @@
 """
 generate_data.py
 ----------------
-Simulates an NBA play-by-play shot log with realistic spatial and situational
-structure (court coordinates, shot clock, defender distance, shot zone, etc.).
+Fast-loop synthetic shot log, in exactly the nba_api ShotChartDetail schema
+(config.SHOT_SCHEMA), spanning config.SYNTHETIC_SEASONS with real-looking
+GAME_DATEs. Used by `run_pipeline.py --synthetic` to catch wiring bugs and
+run the leakage tests in seconds without touching the NBA API.
 
-In production this ingests ~300K shot events directly from the NBA Stats API
-(stats.nba.com / nba_api). This sandbox has no outbound internet access, so
-this script generates a statistically faithful synthetic dataset instead,
-calibrated to published league-average FG% by zone/distance so the modelling
-pipeline downstream (features -> XGBoost -> dashboard) behaves exactly as it
-would on real shot logs. Swap this module out for `nba_api` calls to run on
-live data -- see README.md.
+Planted ground truth (for tests only, never model inputs):
+  - per-player shooting skill      -> data/synthetic/players_truth.parquet
+  - per-team defensive effect      (opponent adjustment on make probability)
+  - league-wide 3pt drift by season
 """
 import numpy as np
 import pandas as pd
 
-RNG = np.random.default_rng(42)
+import config
 
-N_SHOTS = 30_000
-N_PLAYERS = 60
-N_GAMES = 400
+SHOTS_PER_TEAM_GAME = 28
+GAMES_PER_SEASON = 320
+PLAYERS_PER_TEAM = 5
 
 TEAMS = [
     "ATL", "BOS", "BKN", "CHA", "CHI", "CLE", "DAL", "DEN", "DET", "GSW",
@@ -27,135 +26,181 @@ TEAMS = [
     "OKC", "ORL", "PHI", "PHX", "POR", "SAC", "SAS", "TOR", "UTA", "WAS",
 ]
 
-POSITIONS = ["PG", "SG", "SF", "PF", "C"]
-
-FIRST = ["James", "Luka", "Jayson", "Nikola", "Giannis", "Steph", "Kevin", "Devin",
-         "Anthony", "Shai", "Ja", "Trae", "Zion", "Damian", "Joel", "Jimmy", "Kawhi",
-         "Paul", "Donovan", "Tyrese", "Bam", "De'Aaron", "Domantas", "Jalen", "Brandon",
-         "Karl", "Rudy", "Julius", "Scottie", "Franz", "Cade", "Evan", "Desmond",
-         "Anfernee", "Jaren", "LaMelo", "Zach", "Kristaps", "Mikal", "Jaylen",
-         "Draymond", "Klay", "Kyrie", "Fred", "OG", "Pascal", "Jrue", "Derrick",
-         "Bradley", "Josh", "Aaron", "Dejounte", "Alperen", "Chet", "Victor", "Paolo",
-         "Amen", "Ausar", "Scoot", "Brandin"]
-LAST = ["Harden", "Doncic", "Tatum", "Jokic", "Antetokounmpo", "Curry", "Durant",
-        "Booker", "Edwards", "Gilgeous-Alexander", "Morant", "Young", "Williamson",
-        "Lillard", "Embiid", "Butler", "Leonard", "George", "Mitchell", "Haliburton",
-        "Adebayo", "Fox", "Sabonis", "Brunson", "Ingram", "Towns", "Gobert", "Randle",
-        "Barnes", "Wagner", "Cunningham", "Mobley", "Bane", "Simons", "Jackson",
-        "Ball", "LaVine", "Porzingis", "Bridges", "Brown", "Green", "Thompson",
-        "Irving", "VanVleet", "Anunoby", "Siakam", "Holiday", "White", "Beal",
-        "Hart", "Christie", "Murray", "Sengun", "Holmgren", "Wembanyama",
-        "Banchero", "Thompson", "Barlow", "Henderson", "Duren"]
-
-players = pd.DataFrame({
-    "player_id": np.arange(1, N_PLAYERS + 1),
-    "player_name": [f"{FIRST[i % len(FIRST)]} {LAST[i % len(LAST)]}" for i in range(N_PLAYERS)],
-    "position": RNG.choice(POSITIONS, N_PLAYERS),
-    "team": RNG.choice(TEAMS, N_PLAYERS),
-    # latent shooting skill offset applied on top of zone base rate (-0.06 .. +0.09)
-    "skill_offset": RNG.normal(0.0, 0.035, N_PLAYERS).clip(-0.08, 0.10),
-    # latent 3pt specialization offset
-    "three_pt_offset": RNG.normal(0.0, 0.03, N_PLAYERS).clip(-0.06, 0.09),
-})
-
+# zone: (SHOT_ZONE_BASIC, min_ft, max_ft, base_fg, is_three, weight)
 ZONES = [
-    # name, min_dist, max_dist, base_fg%, is_three, weight (sampling frequency)
-    ("Restricted Area",      0.0,  4.0,  0.64, False, 0.28),
-    ("In The Paint (Non-RA)",4.0,  8.0,  0.42, False, 0.12),
-    ("Mid-Range",            8.0, 16.0,  0.41, False, 0.14),
-    ("Long Mid-Range",      16.0, 22.0,  0.40, False, 0.09),
-    ("Left Corner 3",       22.0, 23.9,  0.39, True,  0.06),
-    ("Right Corner 3",      22.0, 23.9,  0.39, True,  0.06),
-    ("Above The Break 3",   23.9, 30.0,  0.36, True,  0.20),
-    ("Deep 3 / Heave",      30.0, 40.0,  0.16, True,  0.05),
+    ("Restricted Area",        0.0,  4.0, 0.60, False, 0.30),
+    ("In The Paint (Non-RA)",  4.0, 14.0, 0.42, False, 0.13),
+    ("Mid-Range",             10.0, 22.0, 0.41, False, 0.14),
+    ("Left Corner 3",         22.0, 23.5, 0.39, True,  0.05),
+    ("Right Corner 3",        22.0, 23.5, 0.39, True,  0.05),
+    ("Above the Break 3",     23.8, 30.0, 0.355, True, 0.32),
+    ("Backcourt",             40.0, 70.0, 0.03, True,  0.01),
 ]
-zone_names = [z[0] for z in ZONES]
-zone_weights = np.array([z[5] for z in ZONES])
-zone_weights = zone_weights / zone_weights.sum()
 
-rows = []
-game_ids = RNG.integers(22600001, 22600001 + N_GAMES, N_GAMES)
+# zone -> [(ACTION_TYPE, weight, make-prob effect)]
+ACTIONS = {
+    "Restricted Area": [
+        ("Layup Shot", 0.25, 0.0), ("Driving Layup Shot", 0.25, -0.05),
+        ("Dunk Shot", 0.12, 0.28), ("Driving Dunk Shot", 0.08, 0.25),
+        ("Alley Oop Dunk Shot", 0.05, 0.25), ("Tip Layup Shot", 0.07, -0.08),
+        ("Cutting Layup Shot", 0.08, 0.08), ("Putback Layup Shot", 0.10, 0.02),
+    ],
+    "In The Paint (Non-RA)": [
+        ("Floating Jump shot", 0.30, 0.0), ("Driving Floating Jump Shot", 0.20, -0.02),
+        ("Hook Shot", 0.25, 0.04), ("Turnaround Jump Shot", 0.15, -0.02),
+        ("Jump Shot", 0.10, 0.0),
+    ],
+    "Mid-Range": [
+        ("Jump Shot", 0.35, 0.03), ("Pullup Jump shot", 0.35, -0.02),
+        ("Turnaround Jump Shot", 0.10, -0.03), ("Fadeaway Jump Shot", 0.10, -0.05),
+        ("Step Back Jump shot", 0.10, -0.03),
+    ],
+    "three": [
+        ("Jump Shot", 0.60, 0.03), ("Pullup Jump shot", 0.25, -0.03),
+        ("Step Back Jump shot", 0.15, -0.04),
+    ],
+    "Backcourt": [("Jump Shot", 1.0, 0.0)],
+}
 
-for i in range(N_SHOTS):
-    player = players.iloc[RNG.integers(0, N_PLAYERS)]
-    zone_idx = RNG.choice(len(ZONES), p=zone_weights)
-    zname, dmin, dmax, base_fg, is_three, _ = ZONES[zone_idx]
 
-    distance = float(RNG.uniform(dmin, max(dmin + 0.1, dmax)))
-    angle_deg = float(RNG.uniform(-80, 80))  # angle from hoop, 0 = straight on
-    if "Corner" in zname:
-        angle_deg = float(RNG.choice([-1, 1])) * RNG.uniform(65, 80)
+def _zone_area(angle_deg: np.ndarray, zone: np.ndarray) -> np.ndarray:
+    area = np.select(
+        [angle_deg < -54, angle_deg < -18, angle_deg <= 18, angle_deg <= 54],
+        ["Left Side(L)", "Left Side Center(LC)", "Center(C)", "Right Side Center(RC)"],
+        default="Right Side(R)",
+    )
+    area = np.where(zone == "Restricted Area", "Center(C)", area)
+    return np.where(zone == "Backcourt", "Back Court(BC)", area)
 
-    angle_rad = np.deg2rad(angle_deg)
-    loc_x = round(distance * np.sin(angle_rad), 1)
-    loc_y = round(distance * np.cos(angle_rad), 1)
 
-    period = int(RNG.choice([1, 2, 3, 4, 5], p=[0.245, 0.245, 0.245, 0.245, 0.02]))
-    minutes_remaining = int(RNG.integers(0, 12))
-    seconds_remaining = int(RNG.integers(0, 60))
-    shot_clock = float(np.clip(RNG.normal(14, 6), 0, 24))
+def _zone_range(dist: np.ndarray, zone: np.ndarray) -> np.ndarray:
+    rng = np.select(
+        [dist < 8, dist < 16, dist < 24],
+        ["Less Than 8 ft.", "8-16 ft.", "16-24 ft."],
+        default="24+ ft.",
+    )
+    return np.where(zone == "Backcourt", "Back Court Shot", rng)
 
-    dribbles = int(RNG.poisson(1.8))
-    touch_time = float(np.clip(RNG.exponential(2.5) + dribbles * 0.6, 0.1, 24))
-    catch_and_shoot = 1 if (dribbles <= 1 and touch_time < 2.5) else 0
 
-    defender_distance = float(np.clip(RNG.normal(4.2, 2.2), 0.2, 15))
-    home = int(RNG.integers(0, 2))
-    score_margin = int(np.clip(RNG.normal(0, 10), -40, 40))
+def generate(seasons=None, seed: int = 42, games_per_season: int = GAMES_PER_SEASON):
+    """Return (shots_df in SHOT_SCHEMA, players_truth_df)."""
+    seasons = seasons or config.SYNTHETIC_SEASONS
+    rng = np.random.default_rng(seed)
 
-    # ---- probability model ----
-    prob = base_fg
-    prob += player["skill_offset"]
-    if is_three:
-        prob += player["three_pt_offset"]
+    team_ids = np.arange(1610612737, 1610612737 + len(TEAMS))
+    team_def = rng.normal(0.0, 0.03, len(TEAMS))  # + = leakier defense
 
-    # tighter defense lowers FG%
-    prob += (defender_distance - 4.0) * 0.012
-    # catch and shoot boosts jumpers, small penalty for heavily dribbled jumpers
-    if not is_three and distance > 8:
-        prob += 0.05 if catch_and_shoot else -0.01 * min(dribbles, 5)
-    if is_three:
-        prob += 0.06 if catch_and_shoot else -0.015 * min(dribbles, 5)
-    # end of shot clock pressure
-    if shot_clock < 4:
-        prob -= 0.09
-    elif shot_clock < 7:
-        prob -= 0.03
-    # garbage-time / big-margin heaves are noisier but roughly neutral
-    prob += RNG.normal(0, 0.015)
-
-    prob = float(np.clip(prob, 0.03, 0.92))
-    made = int(RNG.random() < prob)
-
-    rows.append({
-        "game_id": int(game_ids[i % N_GAMES]),
-        "period": period,
-        "minutes_remaining": minutes_remaining,
-        "seconds_remaining": seconds_remaining,
-        "shot_clock": round(shot_clock, 1),
-        "player_id": int(player["player_id"]),
-        "player_name": player["player_name"],
-        "position": player["position"],
-        "team": player["team"],
-        "opponent": RNG.choice([t for t in TEAMS if t != player["team"]]),
-        "home": home,
-        "score_margin": score_margin,
-        "loc_x": loc_x,
-        "loc_y": loc_y,
-        "shot_distance": round(distance, 1),
-        "shot_zone": zname,
-        "is_three": int(is_three),
-        "dribbles": dribbles,
-        "touch_time": round(touch_time, 1),
-        "catch_and_shoot": catch_and_shoot,
-        "defender_distance": round(defender_distance, 1),
-        "true_prob": round(prob, 4),  # ground-truth latent prob (kept for validation only)
-        "shot_made": made,
+    n_players = len(TEAMS) * PLAYERS_PER_TEAM
+    players = pd.DataFrame({
+        "PLAYER_ID": np.arange(200001, 200001 + n_players),
+        "PLAYER_NAME": [f"Player {i:03d}" for i in range(n_players)],
+        "team_idx": np.repeat(np.arange(len(TEAMS)), PLAYERS_PER_TEAM),
+        "skill": rng.normal(0.0, 0.045, n_players).clip(-0.10, 0.12),
     })
 
-df = pd.DataFrame(rows)
-out_path = "/sessions/compassionate-funny-sagan/mnt/outputs/nba_shot_model/data/shots_raw.csv"
-df.to_csv(out_path, index=False)
-print(f"Wrote {len(df):,} shot events to {out_path}")
-print(df["shot_made"].mean(), "overall FG%")
-print(df.groupby("shot_zone")["shot_made"].mean().round(3))
+    zone_w = np.array([z[5] for z in ZONES])
+    zone_w = zone_w / zone_w.sum()
+
+    frames = []
+    for s_idx, season in enumerate(seasons):
+        start_year = int(season[:4])
+        season_start = pd.Timestamp(f"{start_year}-10-20")
+        day_offsets = np.sort(rng.integers(0, 170, games_per_season))
+        dates = season_start + pd.to_timedelta(day_offsets, unit="D")
+        home = rng.integers(0, len(TEAMS), games_per_season)
+        away = (home + rng.integers(1, len(TEAMS), games_per_season)) % len(TEAMS)
+
+        # one row per shot: each game has SHOTS_PER_TEAM_GAME shots per side
+        n = games_per_season * 2 * SHOTS_PER_TEAM_GAME
+        g = np.repeat(np.arange(games_per_season), 2 * SHOTS_PER_TEAM_GAME)
+        side_home = np.tile(np.repeat([1, 0], SHOTS_PER_TEAM_GAME), games_per_season)
+        off_team = np.where(side_home == 1, home[g], away[g])
+        def_team = np.where(side_home == 1, away[g], home[g])
+        shooter = off_team * PLAYERS_PER_TEAM + rng.integers(0, PLAYERS_PER_TEAM, n)
+
+        zone_idx = rng.choice(len(ZONES), size=n, p=zone_w)
+        zname = np.array([ZONES[i][0] for i in zone_idx])
+        dmin = np.array([ZONES[i][1] for i in zone_idx])
+        dmax = np.array([ZONES[i][2] for i in zone_idx])
+        base = np.array([ZONES[i][3] for i in zone_idx])
+        is_three = np.array([ZONES[i][4] for i in zone_idx])
+        dist = rng.uniform(dmin, dmax)
+
+        angle = rng.uniform(-75, 75, n)
+        angle = np.where(zname == "Left Corner 3", rng.uniform(-88, -80, n), angle)
+        angle = np.where(zname == "Right Corner 3", rng.uniform(80, 88, n), angle)
+        loc_x = np.round(dist * np.sin(np.deg2rad(angle)) * 10).astype(int)
+        loc_y = np.round(dist * np.cos(np.deg2rad(angle)) * 10).astype(int)
+
+        action = np.empty(n, dtype=object)
+        action_eff = np.zeros(n)
+        for z in np.unique(zname):
+            key = "three" if z in ("Left Corner 3", "Right Corner 3", "Above the Break 3") else z
+            opts = ACTIONS[key]
+            mask = zname == z
+            w = np.array([o[1] for o in opts])
+            pick = rng.choice(len(opts), size=mask.sum(), p=w / w.sum())
+            action[mask] = [opts[i][0] for i in pick]
+            action_eff[mask] = [opts[i][2] for i in pick]
+
+        period = rng.choice([1, 2, 3, 4, 5], size=n, p=[0.245, 0.245, 0.245, 0.245, 0.02])
+        mins = rng.integers(0, 12, n)
+        mins = np.where(period == 5, rng.integers(0, 5, n), mins)
+        secs = rng.integers(0, 60, n)
+
+        p = (
+            base
+            + action_eff
+            + players["skill"].to_numpy()[shooter]
+            + team_def[def_team]
+            + np.where(is_three, 0.004 * s_idx, 0.0)       # league 3pt drift
+            + np.where(side_home == 1, 0.005, 0.0)         # small home edge
+            - np.where((mins == 0) & (secs < 3), 0.05, 0.0)  # end-of-quarter rush
+            + rng.normal(0, 0.01, n)
+        )
+        p = np.clip(p, 0.02, 0.95)
+        made = (rng.random(n) < p).astype(int)
+
+        yy = str(start_year)[-2:]
+        game_ids = np.array([f"002{yy}{i + 1:05d}" for i in range(games_per_season)])
+        frames.append(pd.DataFrame({
+            "GRID_TYPE": "Shot Chart Detail",
+            "GAME_ID": game_ids[g],
+            "GAME_EVENT_ID": np.tile(np.arange(1, 2 * SHOTS_PER_TEAM_GAME + 1), games_per_season) * 7,
+            "PLAYER_ID": players["PLAYER_ID"].to_numpy()[shooter],
+            "PLAYER_NAME": players["PLAYER_NAME"].to_numpy()[shooter],
+            "TEAM_ID": team_ids[off_team],
+            "TEAM_NAME": np.array([f"Team {t}" for t in TEAMS])[off_team],
+            "PERIOD": period,
+            "MINUTES_REMAINING": mins,
+            "SECONDS_REMAINING": secs,
+            "EVENT_TYPE": np.where(made == 1, "Made Shot", "Missed Shot"),
+            "ACTION_TYPE": action.astype(str),
+            "SHOT_TYPE": np.where(is_three, "3PT Field Goal", "2PT Field Goal"),
+            "SHOT_ZONE_BASIC": zname,
+            "SHOT_ZONE_AREA": _zone_area(angle, zname),
+            "SHOT_ZONE_RANGE": _zone_range(dist, zname),
+            "SHOT_DISTANCE": np.round(dist).astype(int),
+            "LOC_X": loc_x,
+            "LOC_Y": loc_y,
+            "SHOT_ATTEMPTED_FLAG": 1,
+            "SHOT_MADE_FLAG": made,
+            "GAME_DATE": dates[g].strftime("%Y%m%d"),
+            "HTM": np.array(TEAMS)[home[g]],
+            "VTM": np.array(TEAMS)[away[g]],
+            "SEASON": season,
+        }))
+
+    shots = pd.concat(frames, ignore_index=True)[list(config.SHOT_SCHEMA)]
+    truth = players[["PLAYER_ID", "skill"]].copy()
+    return shots, truth
+
+
+if __name__ == "__main__":
+    config.SYNTHETIC_DIR.mkdir(parents=True, exist_ok=True)
+    shots, truth = generate()
+    shots.to_parquet(config.SYNTHETIC_SHOTS, index=False)
+    truth.to_parquet(config.SYNTHETIC_TRUTH, index=False)
+    print(f"Wrote {len(shots):,} synthetic shots over {shots['SEASON'].nunique()} seasons "
+          f"-> {config.SYNTHETIC_SHOTS.relative_to(config.ROOT)}")
+    print(shots.groupby("SEASON")["SHOT_MADE_FLAG"].agg(["size", "mean"]).round(3).to_string())

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.tmp
+
+# data: real pulls and all generated artifacts stay local
+data/raw/
+data/synthetic/
+data/*.parquet
+data/*.csv
+
+# models: keep metrics, ignore boosters and synthetic runs
+models/*.json
+!models/metrics.json
+models/synthetic/
