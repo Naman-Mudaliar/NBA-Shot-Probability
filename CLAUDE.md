@@ -34,6 +34,12 @@ trained on early seasons and updated walk-forward (weekly) through recent ones.
 - `schema.py` — raw schema validation/coercion (shared by fetch + tests).
 - `generate_data.py` — synthetic data in real schema, with planted player skill / team defense.
 - `fetch_data.py` — checkpointed real pull: per-season `.tmp` → validate → atomic rename,
-  `data/raw/manifest.json` (rows + sha256) decides what to skip.
+  `data/raw/manifest.json` (rows + sha256 + validator version) decides what to skip.
+  stats.nba.com gotchas (both observed, both silent):
+  - python-requests / `nba_api` HTTP calls **hang to timeout** (CDN client fingerprinting);
+    `curl` with the same headers (incl. `x-nba-stats-origin`/`x-nba-stats-token`) works → we shell out to curl.
+  - League-wide `TeamID=0` shotchartdetail **truncates at 102,400 rows** (half a season, HTTP 200).
+    → fetch per team (30 calls/season, ~105 s) and validate by game count (1230; 1059 for 2019-20 incl. bubble seeding games,
+    1080 for 2020-21) + last game in April. Bump `VALIDATOR_VERSION` when validation tightens.
 - `features.py`, `split.py`, `train_model.py` — model pipeline.
 - `dashboard/`, `build_dashboard_data.py` — legacy, to be rebuilt on the last 2 seasons later.

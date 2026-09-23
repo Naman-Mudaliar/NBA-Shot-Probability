@@ -31,6 +31,10 @@ def schema_errors(df: pd.DataFrame) -> list[str]:
 def coerce(df: pd.DataFrame) -> pd.DataFrame:
     """Cast a raw nba_api frame to SHOT_SCHEMA dtypes (API sometimes returns floats/objects)."""
     df = df.copy()
+    null_ints = {c: int(df[c].isna().sum()) for c, k in SHOT_SCHEMA.items()
+                 if k == "int" and c in df.columns and df[c].isna().any()}
+    if null_ints:
+        raise ValueError(f"nulls in integer columns (rows): {null_ints}")
     for col, kind in SHOT_SCHEMA.items():
         if col not in df.columns:
             continue
