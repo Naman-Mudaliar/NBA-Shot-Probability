@@ -24,7 +24,7 @@ else:
     if not config.REAL_SHOTS.exists():
         sys.exit(f"{config.REAL_SHOTS.relative_to(config.ROOT)} missing -- run `python fetch_data.py` first.")
     steps = []
-steps += [["features.py", *flag]]
+steps += [["features.py", *flag], ["train_model.py", *flag]]
 steps += [["-m", "pytest", "-q"]]
 
 for step in steps:
