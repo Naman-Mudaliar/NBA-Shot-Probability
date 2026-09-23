@@ -1,0 +1,36 @@
+{
+  "n_train": 24000,
+  "n_test": 6000,
+  "best_iteration": 47,
+  "roc_auc": 0.6589,
+  "log_loss": 0.643,
+  "baseline_log_loss": 0.6843,
+  "brier_score": 0.2262,
+  "base_rate_fg_pct": 0.4335,
+  "calibration": {
+    "predicted_mean_by_bin": [
+      0.215,
+      0.321,
+      0.349,
+      0.37,
+      0.394,
+      0.421,
+      0.456,
+      0.556,
+      0.61,
+      0.658
+    ],
+    "actual_frac_by_bin": [
+      0.178,
+      0.325,
+      0.347,
+      0.337,
+      0.445,
+      0.408,
+      0.462,
+      0.582,
+      0.618,
+      0.633
+    ]
+  }
+}

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>NBA Shot Probability Model — Dashboard</title>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #12182e;
+    --panel-2: #161d38;
+    --border: #232b4d;
+    --text: #e8ebf7;
+    --muted: #8b93b8;
+    --accent: #ff6b35;
+    --accent2: #3d7bff;
+    --good: #34d399;
+    --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  header h1 { margin: 0; font-size: 20px; font-weight: 700; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  .metrics-strip {
+    display: flex;
+    gap: 12px;
+    padding: 14px 28px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
+  .metric-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    min-width: 130px;
+  }
+  .metric-card .val { font-size: 20px; font-weight: 700; }
+  .metric-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+    padding: 20px 28px 40px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .panel h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .filters label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  select, input[type=range] { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-size: 13px; }
+  .stack { display: flex; flex-direction: column; gap: 20px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; cursor: pointer; position: sticky; top: 0; background: var(--panel); }
+  tbody tr:hover { background: var(--panel-2); }
+  .pos { color: var(--good); }
+  .neg { color: var(--bad); }
+  .scroll-table { max-height: 340px; overflow-y: auto; }
+  .tag { display: inline-block; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--muted); }
+  footer { text-align: center; color: var(--muted); font-size: 11px; padding: 20px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>NBA Shot Probability Model</h1>
+    <div class="sub">XGBoost expected-FG% model &middot; interactive shot chart, player reports &amp; model diagnostics</div>
+  </div>
+  <div class="tag">synthetic demo dataset &middot; 30,000 shot events</div>
+</header>
+
+<div class="metrics-strip" id="metricsStrip"></div>
+
+<main>
+  <div class="panel filters">
+    <h2>Filters</h2>
+    <label for="playerSel">Player</label>
+    <select id="playerSel"><option value="">All players</option></select>
+
+    <label for="zoneSel">Shot Zone</label>
+    <select id="zoneSel"><option value="">All zones</option></select>
+
+    <label for="periodSel">Period</label>
+    <select id="periodSel">
+      <option value="">All periods</option>
+      <option value="1">Q1</option><option value="2">Q2</option>
+      <option value="3">Q3</option><option value="4">Q4</option><option value="5">OT</option>
+    </select>
+
+    <label for="resultSel">Result</label>
+    <select id="resultSel">
+      <option value="">Makes &amp; misses</option>
+      <option value="1">Makes only</option>
+      <option value="0">Misses only</option>
+    </select>
+
+    <div id="filterSummary" style="margin-top:16px; font-size:12px; color:var(--muted);"></div>
+
+    <h2 style="margin-top:24px;">Feature Importance (gain)</h2>
+    <div id="importanceChart"></div>
+  </div>
+
+  <div class="stack">
+    <div class="grid2">
+      <div class="panel">
+        <h2>Shot Chart — colored by predicted make probability</h2>
+        <div id="courtChart"></div>
+      </div>
+      <div class="panel">
+        <h2>Model Calibration (test set)</h2>
+        <div id="calChart"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Zone Report — Actual vs. Expected FG%</h2>
+      <div id="zoneChart"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Player Report — Shot-Making Skill (Actual FG% − Expected FG%), min. 80 attempts</h2>
+      <div class="scroll-table">
+        <table id="playerTable">
+          <thead>
+            <tr>
+              <th data-key="player_name">Player</th>
+              <th data-key="team">Team</th>
+              <th data-key="attempts">Att</th>
+              <th data-key="actual_fg_pct">Actual FG%</th>
+              <th data-key="expected_fg_pct">Expected FG%</th>
+              <th data-key="fg_pct_over_expected">FG% Over Exp.</th>
+              <th data-key="makes_over_expected">Makes Over Exp.</th>
+            </tr>
+          </thead>
+          <tbody id="playerTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>NBA Shot Probability Model &middot; Python / pandas / XGBoost / scikit-learn pipeline &middot; demo dashboard built with Plotly</footer>
+
+<script>
+const DATA = __DATA_JSON__;
+
+// ---------- populate filter dropdowns ----------
+const playerSel = document.getElementById('playerSel');
+DATA.players.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; playerSel.appendChild(o); });
+const zoneSel = document.getElementById('zoneSel');
+DATA.zones.forEach(z => { const o = document.createElement('option'); o.value = z; o.textContent = z; zoneSel.appendChild(o); });
+
+// ---------- metrics strip ----------
+const m = DATA.metrics;
+const metricsHtml = [
+  ['ROC AUC', m.roc_auc],
+  ['Log Loss', m.log_loss + ' (base ' + m.baseline_log_loss + ')'],
+  ['Brier Score', m.brier_score],
+  ['League Avg FG%', (m.base_rate_fg_pct*100).toFixed(1) + '%'],
+  ['Train / Test', m.n_train.toLocaleString() + ' / ' + m.n_test.toLocaleString()],
+].map(([label, val]) => `<div class="metric-card"><div class="val">${val}</div><div class="label">${label}</div></div>`).join('');
+document.getElementById('metricsStrip').innerHTML = metricsHtml;
+
+// ---------- feature importance ----------
+Plotly.newPlot('importanceChart', [{
+  type: 'bar', orientation: 'h',
+  x: DATA.feature_importance.map(d => d.gain).reverse(),
+  y: DATA.feature_importance.map(d => d.feature).reverse(),
+  marker: { color: '#ff6b35' },
+}], {
+  margin: { l: 140, r: 10, t: 4, b: 30 }, height: 340,
+  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+  font: { color: '#e8ebf7', size: 10 },
+  xaxis: { gridcolor: '#232b4d' },
+}, { displayModeBar: false, responsive: true });
+
+// ---------- calibration ----------
+const cal = m.calibration;
+Plotly.newPlot('calChart', [
+  { x: [0,1], y: [0,1], mode: 'lines', line: { dash: 'dot', color: '#8b93b8' }, name: 'Perfect calibration' },
+  { x: cal.predicted_mean_by_bin, y: cal.actual_frac_by_bin, mode: 'lines+markers', name: 'Model',
+    line: { color: '#3d7bff' }, marker: { size: 7 } },
+], {
+  margin: { l: 45, r: 10, t: 4, b: 40 }, height: 300,
+  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+  font: { color: '#e8ebf7', size: 11 },
+  xaxis: { title: 'Predicted probability', gridcolor: '#232b4d' },
+  yaxis: { title: 'Actual frequency', gridcolor: '#232b4d' },
+  legend: { orientation: 'h', y: -0.25 },
+}, { displayModeBar: false, responsive: true });
+
+// ---------- zone report ----------
+function drawZoneChart() {
+  const zr = DATA.zone_report.slice().sort((a,b) => b.attempts - a.attempts);
+  Plotly.newPlot('zoneChart', [
+    { type: 'bar', name: 'Actual FG%', x: zr.map(d => d.shot_zone), y: zr.map(d => d.actual_fg_pct), marker: { color: '#3d7bff' } },
+    { type: 'bar', name: 'Expected FG%', x: zr.map(d => d.shot_zone), y: zr.map(d => d.expected_fg_pct), marker: { color: '#ff6b35' } },
+  ], {
+    barmode: 'group', margin: { l: 45, r: 10, t: 4, b: 90 }, height: 300,
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { color: '#e8ebf7', size: 11 },
+    yaxis: { title: 'FG%', gridcolor: '#232b4d', tickformat: '.0%' },
+    legend: { orientation: 'h', y: -0.5 },
+  }, { displayModeBar: false, responsive: true });
+}
+drawZoneChart();
+
+// ---------- court shot chart ----------
+function courtShapes() {
+  const s = [];
+  const line = { line: { color: '#3a4270', width: 1.5 } };
+  // hoop
+  s.push({ type: 'circle', x0: -0.75, y0: -0.75, x1: 0.75, y1: 0.75, ...line });
+  // backboard
+  s.push({ type: 'line', x0: -3, y0: -1.3, x1: 3, y1: -1.3, ...line });
+  // paint
+  s.push({ type: 'rect', x0: -8, y0: -1.3, x1: 8, y1: 19, ...line });
+  s.push({ type: 'rect', x0: -6, y0: -1.3, x1: 6, y1: 19, ...line });
+  // free throw circle
+  s.push({ type: 'circle', x0: -6, y0: 13, x1: 6, y1: 25, ...line });
+  // restricted area
+  s.push({ type: 'circle', x0: -4, y0: -1.3, x1: 4, y1: 6.7, ...line });
+  // three point arc (approx) + corners
+  s.push({ type: 'line', x0: -22, y0: -1.3, x1: -22, y1: 9.9, ...line });
+  s.push({ type: 'line', x0: 22, y0: -1.3, x1: 22, y1: 9.9, ...line });
+  s.push({ type: 'path', path: 'M -22,9.9 Q 0,48 22,9.9', ...line });
+  // half court boundary
+  s.push({ type: 'rect', x0: -25, y0: -1.3, x1: 25, y1: 47, line: { color: '#232b4d', width: 1 } });
+  return s;
+}
+
+function currentFilters() {
+  return {
+    player: playerSel.value,
+    zone: zoneSel.value,
+    period: document.getElementById('periodSel').value,
+    result: document.getElementById('resultSel').value,
+  };
+}
+
+function filteredShots() {
+  const f = currentFilters();
+  return DATA.shots.filter(s =>
+    (!f.player || s.player_name === f.player) &&
+    (!f.zone || s.shot_zone === f.zone) &&
+    (!f.period || String(s.period) === f.period) &&
+    (f.result === '' || String(s.shot_made) === f.result)
+  );
+}
+
+function drawCourt() {
+  const shots = filteredShots();
+  Plotly.newPlot('courtChart', [{
+    type: 'scattergl',
+    mode: 'markers',
+    x: shots.map(s => s.loc_x),
+    y: shots.map(s => s.loc_y),
+    marker: {
+      size: 6,
+      color: shots.map(s => s.predicted_prob),
+      colorscale: [[0, '#f87171'], [0.5, '#facc15'], [1, '#34d399']],
+      cmin: 0, cmax: 0.9,
+      colorbar: { title: 'P(make)', thickness: 12, tickfont: { color: '#e8ebf7', size: 10 } },
+      line: { width: 0.5, color: 'rgba(0,0,0,0.4)' },
+      symbol: shots.map(s => s.shot_made ? 'circle' : 'x'),
+    },
+    text: shots.map(s => `${s.player_name}<br>${s.shot_zone} (${s.shot_distance}ft)<br>P(make)=${s.predicted_prob}<br>${s.shot_made ? 'MADE' : 'MISS'}`),
+    hoverinfo: 'text',
+  }], {
+    shapes: courtShapes(),
+    margin: { l: 10, r: 10, t: 4, b: 10 }, height: 480,
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    xaxis: { range: [-27, 27], visible: false },
+    yaxis: { range: [-3, 48], visible: false, scaleanchor: 'x', scaleratio: 1 },
+  }, { displayModeBar: false, responsive: true });
+
+  const made = shots.filter(s => s.shot_made).length;
+  document.getElementById('filterSummary').innerHTML =
+    `<strong>${shots.length.toLocaleString()}</strong> shots shown &middot; ${shots.length ? (100*made/shots.length).toFixed(1) : '0'}% actual FG%`;
+}
+
+[playerSel, zoneSel, document.getElementById('periodSel'), document.getElementById('resultSel')]
+  .forEach(el => el.addEventListener('change', drawCourt));
+drawCourt();
+
+// ---------- player table ----------
+let sortKey = 'makes_over_expected', sortDir = -1;
+function renderPlayerTable() {
+  const rows = DATA.player_report.slice().sort((a,b) => (a[sortKey] - b[sortKey]) * sortDir);
+  document.getElementById('playerTableBody').innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.player_name}</td>
+      <td>${r.team}</td>
+      <td>${r.attempts}</td>
+      <td>${(r.actual_fg_pct*100).toFixed(1)}%</td>
+      <td>${(r.expected_fg_pct*100).toFixed(1)}%</td>
+      <td class="${r.fg_pct_over_expected >= 0 ? 'pos' : 'neg'}">${r.fg_pct_over_expected >= 0 ? '+' : ''}${(r.fg_pct_over_expected*100).toFixed(1)}%</td>
+      <td class="${r.makes_over_expected >= 0 ? 'pos' : 'neg'}">${r.makes_over_expected >= 0 ? '+' : ''}${r.makes_over_expected.toFixed(1)}</td>
+    </tr>`).join('');
+}
+document.querySelectorAll('#playerTable th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    sortDir = (sortKey === key) ? -sortDir : -1;
+    sortKey = key;
+    renderPlayerTable();
+  });
+});
+renderPlayerTable();
+</script>
+</body>
+</html>
