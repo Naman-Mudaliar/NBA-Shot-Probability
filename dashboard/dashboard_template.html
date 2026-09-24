@@ -3,225 +3,373 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>NBA xFG%</title>
+<title>Beating the Odds: NBA Shot Quality</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.32.0/plotly.min.js"></script>
 <style>
-/* ---------- tokens (reference data-viz palette, light + selected dark steps) ---------- */
+/* ---------- tokens (reference data-viz palette; dark steps selected, not flipped) ---------- */
 :root {
   color-scheme: light;
-  --page: #f9f9f7; --surface-1: #fcfcfb; --surface-2: #f3f2ef;
-  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #6f6d68;
-  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --page: #f7f6f2; --surface-1: #fdfcfa; --surface-2: #f1efe9; --surface-3: #e9e6de;
+  --text-primary: #111110; --text-secondary: #4d4b46; --text-muted: #6f6c65;
+  --grid: #e4e1d8; --axis: #c3c0b5; --border: rgba(17,17,16,0.09);
   --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4;
   --div-mid: #f0efec; --cold: #256abf; --hot: #c23a3a; --muted-mark: #b9b7ae;
   --good-text: #006300; --bad-text: #b3261e;
-  --accent: #2a78d6;
+  --accent: #2a78d6; --accent-soft: rgba(42,120,214,0.10);
+  --shadow: 0 1px 2px rgba(17,17,16,0.04), 0 6px 24px rgba(17,17,16,0.04);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #232321;
-    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #9a988f;
-    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --page: #0f0f0e; --surface-1: #1a1a19; --surface-2: #232321; --surface-3: #2c2c2a;
+    --text-primary: #f7f6f2; --text-secondary: #c3c2b7; --text-muted: #9a988f;
+    --grid: #2c2c2a; --axis: #3d3d3a; --border: rgba(255,255,255,0.09);
     --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
     --div-mid: #383835; --cold: #5598e7; --hot: #e66767; --muted-mark: #55544f;
     --good-text: #0ca30c; --bad-text: #ff8a80;
-    --accent: #3987e5;
+    --accent: #5598e7; --accent-soft: rgba(85,152,231,0.14);
+    --shadow: none;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0d0d0d; --surface-1: #1a1a19; --surface-2: #232321;
-  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #9a988f;
-  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --page: #0f0f0e; --surface-1: #1a1a19; --surface-2: #232321; --surface-3: #2c2c2a;
+  --text-primary: #f7f6f2; --text-secondary: #c3c2b7; --text-muted: #9a988f;
+  --grid: #2c2c2a; --axis: #3d3d3a; --border: rgba(255,255,255,0.09);
   --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181;
   --div-mid: #383835; --cold: #5598e7; --hot: #e66767; --muted-mark: #55544f;
   --good-text: #0ca30c; --bad-text: #ff8a80;
-  --accent: #3987e5;
+  --accent: #5598e7; --accent-soft: rgba(85,152,231,0.14);
+  --shadow: none;
 }
 
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body { margin: 0; background: var(--page); color: var(--text-primary);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-.wrap { max-width: 1320px; margin: 0 auto; padding: 24px 20px 64px; }
-header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-h1 { font-size: 26px; margin: 0; letter-spacing: -0.01em; }
-.sub { color: var(--text-secondary); margin-top: 4px; }
-.badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); margin-left: 6px; }
-.badge.warn { color: var(--bad-text); }
-h2 { font-size: 19px; margin: 36px 0 4px; }
-h2 + .lede { color: var(--text-secondary); margin: 0 0 14px; max-width: 900px; }
-h3 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
-.note { color: var(--text-muted); font-size: 12.5px; margin: 0 0 8px; }
-.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; min-width: 0; }
-.grid { display: grid; gap: 14px; }
-.g2 { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1140px; margin: 0 auto; padding: 0 20px 80px; }
+p { margin: 0 0 12px; }
+b, strong { font-weight: 650; }
+
+/* ---------- chapter bar ---------- */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--page) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--border); }
+.bar-in { max-width: 1140px; margin: 0 auto; padding: 8px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.bar nav { display: flex; gap: 2px; flex-wrap: wrap; flex: 1 1 auto; }
+.bar nav a { color: var(--text-secondary); text-decoration: none; font-size: 13.5px; padding: 6px 10px; border-radius: 8px; white-space: nowrap; }
+.bar nav a:hover { background: var(--surface-2); color: var(--text-primary); }
+.bar nav a[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.bar nav a .n { color: var(--text-muted); font-variant-numeric: tabular-nums; margin-right: 4px; }
+.bar nav a[aria-current="true"] .n { color: inherit; }
+.bar .tools { display: flex; gap: 8px; align-items: center; }
+
+/* ---------- hero ---------- */
+.hero { padding: 56px 0 28px; }
+.kicker { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+.hero h1 { font-size: clamp(30px, 4.6vw, 48px); line-height: 1.08; letter-spacing: -0.02em; margin: 0 0 18px; max-width: 18ch; }
+.hero .lede { font-size: 18px; line-height: 1.6; color: var(--text-secondary); max-width: 64ch; }
+.hero .lede b { color: var(--text-primary); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 28px; }
+.fact { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); }
+.fact .big { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.15; }
+.fact .what { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+.fact.link { cursor: pointer; }
+.fact.link:hover { border-color: var(--accent); }
+.badge { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--bad-text);
+  border: 1px solid var(--border); margin-left: 8px; vertical-align: middle; letter-spacing: 0; text-transform: none; }
+
+/* ---------- chapters ---------- */
+section.chapter { padding-top: 48px; margin-top: 28px; border-top: 1px solid var(--border); }
+.chap-head { display: grid; grid-template-columns: 56px 1fr; gap: 4px 12px; margin-bottom: 20px; }
+.chap-num { font-size: 15px; font-weight: 700; color: var(--accent); padding-top: 9px; font-variant-numeric: tabular-nums; }
+.chap-head h2 { font-size: clamp(24px, 3vw, 32px); line-height: 1.15; letter-spacing: -0.015em; margin: 0; }
+.chap-head .lede { grid-column: 2; font-size: 16.5px; color: var(--text-secondary); max-width: 68ch; margin-top: 8px; }
+.chap-head .lede b { color: var(--text-primary); }
+@media (max-width: 560px) { .chap-head { grid-template-columns: 1fr; } .chap-head .lede { grid-column: 1; } .chap-num { padding: 0; } }
+.insight { font-size: 16px; line-height: 1.6; max-width: 72ch; padding: 12px 16px; border-left: 3px solid var(--accent); background: var(--accent-soft);
+  border-radius: 0 10px 10px 0; margin: 0 0 18px; }
+.insight b { font-weight: 650; }
+
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; min-width: 0; box-shadow: var(--shadow); }
+.card h3 { font-size: 16px; margin: 0 0 4px; font-weight: 650; letter-spacing: -0.005em; }
+.card .note { color: var(--text-muted); font-size: 13.5px; margin: 0 0 10px; max-width: 70ch; }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); }
 .g3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-.g4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
-@media (max-width: 480px) { .g2 { grid-template-columns: 1fr; } }
-.tile .label { color: var(--text-secondary); font-size: 12.5px; }
-.tile .value { font-size: 28px; font-weight: 650; margin: 2px 0; }
-.tile .cmp { color: var(--text-muted); font-size: 12.5px; }
+@media (max-width: 520px) { .g2, .g3 { grid-template-columns: 1fr; } }
+.stack > * + * { margin-top: 16px; }
 .chart { width: 100%; min-height: 260px; }
 .chart.court { min-height: 440px; }
-.empty { color: var(--text-muted); padding: 40px 10px; text-align: center; }
+.empty { color: var(--text-muted); padding: 60px 16px; text-align: center; font-size: 14px; }
 
-/* filters: one row above everything they scope */
-.filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; background: var(--surface-1);
-  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
-.filters label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-secondary); }
-select, input[type=text], input[type=search] { font: inherit; color: var(--text-primary); background: var(--surface-2);
-  border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; min-width: 120px; }
-input[type=range] { width: 160px; accent-color: var(--accent); }
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.seg button { font: inherit; font-size: 13px; border: 0; background: var(--surface-2); color: var(--text-secondary); padding: 6px 10px; cursor: pointer; }
+/* ---------- controls ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; margin: 0 0 16px; }
+.controls label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-secondary); }
+select, input[type=search] { font: inherit; font-size: 14px; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 9px; padding: 7px 10px; min-width: 130px; }
+input[type=range] { width: 170px; accent-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: var(--surface-1); }
+.seg button { font: inherit; font-size: 13.5px; border: 0; background: transparent; color: var(--text-secondary); padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
 .seg button[aria-pressed=true] { background: var(--accent); color: #fff; }
-button.link { font: inherit; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; }
-button.ghost { font: inherit; font-size: 13px; background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-.summary { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--text-secondary); margin: 0 0 12px; font-size: 13px; }
-.summary b { color: var(--text-primary); font-weight: 600; }
+button.ghost { font: inherit; font-size: 13px; background: var(--surface-1); color: var(--text-secondary); border: 1px solid var(--border);
+  border-radius: 9px; padding: 6px 11px; cursor: pointer; }
+button.ghost:hover { color: var(--text-primary); }
+button.link { font: inherit; font-size: 13.5px; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* tables */
+.search-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.search-row input[type=search] { font-size: 16px; padding: 10px 14px; min-width: min(360px, 100%); border-radius: 12px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chips .label { color: var(--text-muted); font-size: 13px; margin-right: 2px; }
+.chip { font: inherit; font-size: 13.5px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+  border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.player-line { font-size: 17px; line-height: 1.55; margin: 6px 0 16px; max-width: 75ch; }
+.player-line .muted { color: var(--text-muted); }
+details.more { margin-top: 4px; }
+details.more > summary { cursor: pointer; color: var(--text-secondary); font-size: 13.5px; list-style: none; display: inline-flex; gap: 6px; align-items: center; }
+details.more > summary::before { content: "+"; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; background: var(--surface-2); font-size: 13px; }
+details.more[open] > summary::before { content: "−"; }
+details.more > .inner { margin-top: 12px; }
+
+/* ---------- podium ---------- */
+.podium { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.pod { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; cursor: pointer; box-shadow: var(--shadow); text-align: left; font: inherit; color: inherit; }
+.pod:hover { border-color: var(--accent); }
+.pod .rank { font-size: 12.5px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.pod .name { font-size: 20px; font-weight: 700; margin: 2px 0 2px; letter-spacing: -0.01em; }
+.pod .team { color: var(--text-muted); font-size: 13px; font-weight: 500; margin-left: 6px; }
+.pod .headline { font-size: 26px; font-weight: 700; color: var(--good-text); margin: 6px 0 2px; }
+.pod .explain { color: var(--text-secondary); font-size: 13.5px; }
+
+/* ---------- tables ---------- */
 .tbl-wrap { overflow-x: auto; }
-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: right; padding: 7px 9px; border-bottom: 1px solid var(--grid); white-space: nowrap; font-variant-numeric: tabular-nums; }
 th:first-child, td:first-child, th.l, td.l { text-align: left; }
-th { color: var(--text-secondary); font-weight: 600; position: sticky; top: 0; background: var(--surface-1); }
+th { color: var(--text-muted); font-weight: 600; font-size: 12.5px; position: sticky; top: 0; background: var(--surface-1); }
 th.sort { cursor: pointer; user-select: none; }
+th.sort:hover { color: var(--text-primary); }
 th.sort[aria-sort=descending]::after { content: " \25BE"; }
 th.sort[aria-sort=ascending]::after { content: " \25B4"; }
 tbody tr.click { cursor: pointer; }
 tbody tr.click:hover { background: var(--surface-2); }
+td.name { font-weight: 600; }
 .pos { color: var(--good-text); } .neg { color: var(--bad-text); }
-details.tbl { margin-top: 8px; }
-details.tbl summary { cursor: pointer; color: var(--text-secondary); font-size: 12.5px; }
-details.tbl .tbl-wrap { max-height: 320px; overflow: auto; margin-top: 6px; }
-.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
-footer { color: var(--text-muted); font-size: 12px; margin-top: 40px; }
+.verdict { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); }
+.verdict i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.table-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--text-muted); font-size: 13px; gap: 10px; flex-wrap: wrap; }
+
+.steps { counter-reset: s; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 16px; }
+.step { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+.step::before { counter-increment: s; content: counter(s); display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+.step b { display: block; margin-bottom: 2px; }
+.step span { color: var(--text-secondary); font-size: 14px; }
+.report { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.report .fact .big { font-size: 24px; }
+footer { color: var(--text-muted); font-size: 13px; margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); }
 </style>
 </head>
 <body>
-<div class="wrap viz-root">
-  <header class="top">
-    <div>
-      <h1>NBA Shot Probability <span style="font-weight:400;color:var(--text-secondary)">(xFG%)</span></h1>
-      <div class="sub" id="subtitle"></div>
+
+<div class="bar">
+  <div class="bar-in">
+    <nav id="chapterNav" aria-label="Chapters">
+      <a href="#good-shot"><span class="n">1</span>What's a good shot</a>
+      <a href="#beat-odds"><span class="n">2</span>Who beats the odds</a>
+      <a href="#explore"><span class="n">3</span>Explore a player</a>
+      <a href="#moments"><span class="n">4</span>Shots to remember</a>
+      <a href="#teams"><span class="n">5</span>Teams</a>
+      <a href="#model"><span class="n">6</span>How it works</a>
+    </nav>
+    <div class="tools">
+      <span class="seg" id="bMetric" role="group" aria-label="Count makes or points">
+        <button type="button" data-metric="xfg" aria-pressed="true" title="Every make counts the same">Count makes</button>
+        <button type="button" data-metric="xpts" aria-pressed="false" title="Threes count 3, twos count 2">Count points</button></span>
+      <button class="ghost" id="themeBtn" type="button" aria-label="Toggle theme">Theme: system</button>
     </div>
-    <button class="ghost" id="themeBtn" type="button" aria-label="Toggle theme">Theme: system</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- ================= hero ================= -->
+  <header class="hero">
+    <div class="kicker" id="kicker"></div>
+    <h1>Some shots are easy. Some players make the hard ones anyway.</h1>
+    <p class="lede">For every shot of the last two NBA seasons, a model estimated how often an <b>average player</b> would make it,
+      based on where it was taken, what kind of shot it was, the game clock and the defense. It never knows who is shooting.
+      That estimate is the shot's <b>expected make rate (xFG%)</b>. Put it next to what actually happened and you can see
+      who makes more than their shots deserve, and who makes less.</p>
+    <div class="facts" id="heroFacts"></div>
   </header>
 
-  <div class="grid g4" id="tiles"></div>
+  <!-- ================= 1. good shot ================= -->
+  <section class="chapter" id="good-shot">
+    <div class="chap-head"><div class="chap-num">01</div>
+      <h2>What makes a good shot?</h2>
+      <p class="lede">Before judging players, it helps to know what a shot is worth. Location matters most, then how the shot is taken.</p></div>
+    <p class="insight" id="goodShotInsight"></p>
+    <div class="grid g2">
+      <div class="card"><h3>Expected points per attempt, by zone</h3>
+        <p class="note">Every shot from the last two seasons. Darker = worth more. A three that goes in 36% of the time is worth more than a two that goes in 45%.</p>
+        <div class="chart court" id="leagueZoneChart"></div>
+        <details class="more"><summary>See the numbers</summary><div class="inner tbl-wrap" id="leagueZoneTable"></div></details></div>
+      <div class="card"><h3 id="familyTitle">How a shot is taken matters too</h3>
+        <p class="note">Expected make rate by shot type, league-wide. The label shows how common each type is.</p>
+        <div class="chart" id="familyChart" style="min-height:440px"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px"><h3 id="mixTitle">The league has figured this out</h3>
+      <p class="note" id="mixNote">Share of all shots from each part of the floor, season by season.</p>
+      <div class="chart" id="mixChart"></div>
+      <details class="more"><summary>See the numbers</summary><div class="inner tbl-wrap" id="mixTable"></div></details></div>
+  </section>
 
-  <!-- ================= A. Training & model ================= -->
-  <h2 id="training">Training data &amp; model</h2>
-  <p class="lede">The model is <b>shooter-blind</b>: it only sees the shot (location, type, game situation) and
-    the opponent's defense from earlier games. It trained on the early seasons, then walked forward week by week,
-    predicting each week <b>before</b> learning from it. Every xFG% on this page is one of those pre-shot predictions.</p>
-  <div class="grid g2">
-    <div class="card"><h3>Shots per season, by role in training</h3>
-      <p class="note">Train seasons fit the model, the early-stop season picks how long to train, walk-forward seasons are predicted week by week.</p>
-      <div class="chart" id="coverageChart"></div>
-      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="coverageTable"></div></details></div>
-    <div class="card"><h3>Held-out accuracy, week by week</h3>
-      <p class="note">Log loss (lower is better), 4-week rolling. The weekly-updated model pulls away from the frozen one as the league drifts.</p>
-      <div class="chart" id="curveChart"></div>
-      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="seasonMetricsTable2"></div></details></div>
-  </div>
-  <div class="grid g3" style="margin-top:14px">
-    <div class="card"><h3>League FG% by season</h3><div class="chart" id="fgTrendChart"></div></div>
-    <div class="card"><h3>3-point attempt rate by season</h3><div class="chart" id="threeTrendChart"></div></div>
-    <div class="card"><h3>Shot mix by zone group</h3><div class="chart" id="mixChart"></div>
-      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="mixTable"></div></details></div>
-  </div>
-  <div class="grid g3" style="margin-top:14px">
-    <div class="card"><h3>Calibration (held-out)</h3>
-      <p class="note">Predicted vs actual make rate in 10 equal-size bins. On the diagonal = honest probabilities.</p>
-      <div class="chart" id="calChart"></div>
-      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="calTable"></div></details></div>
-    <div class="card"><h3>What drives the prediction</h3>
-      <p class="note">Feature importance (gain), top 15.</p>
-      <div class="chart" id="impChart"></div>
-      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="impTable"></div></details></div>
-    <div class="card"><h3>Per-season metrics (walk-forward)</h3>
-      <p class="note">Log loss for weekly-updated / frozen / zone-average baseline.</p>
-      <div class="tbl-wrap" id="seasonMetricsTable"></div></div>
-  </div>
+  <!-- ================= 2. beat the odds ================= -->
+  <section class="chapter" id="beat-odds">
+    <div class="chap-head"><div class="chap-num">02</div>
+      <h2>Who beats the odds?</h2>
+      <p class="lede">Add up the expected make rate of every shot a player took and you get how many an <b>average player</b> would have made.
+        The difference from what they actually made is their <b>shot-making</b>. Because the model never sees the shooter, that gap belongs to the player.</p></div>
+    <div class="podium" id="podium"></div>
+    <div class="card">
+      <div class="controls" style="margin-bottom:10px">
+        <label>Season <select id="bScope"></select></label>
+        <label>Part of the floor <select id="bZone"></select></label>
+        <label>At least <span style="display:flex;align-items:center;gap:8px"><input type="range" id="bMin" min="50" max="1500" step="50"><b id="bMinVal"></b> shots</span></label>
+      </div>
+      <h3 id="boardTitle">Leaderboard</h3>
+      <p class="note">Click a column to sort, or a player to see their shots.</p>
+      <div class="tbl-wrap" id="boardTable"></div>
+      <div class="table-foot"><span id="boardCount"></span><button class="link" id="boardMore" type="button"></button></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3>Good shots or good shooting?</h3>
+        <p class="note">Left to right: how easy a player's shots are. Bottom to top: how much they beat those odds. The best scorers either take great shots or make hard ones.</p>
+        <div class="chart" id="quadChart" style="min-height:420px"></div></div>
+      <div class="card"><h3>Skill, or just a lucky run?</h3>
+        <p class="note">Even an exactly average shooter drifts above or below zero by chance, and the drift grows with more shots.
+          The shaded band is where that luck lands 95% of the time. Dots inside it could be a hot or cold streak; dots outside it almost certainly aren't.</p>
+        <p class="note" id="luckNote" style="color:var(--text-secondary)"></p>
+        <div class="chart" id="luckChart" style="min-height:400px"></div></div>
+    </div>
+    <details class="more" style="margin-top:16px"><summary>Who takes the easiest and hardest shots?</summary>
+      <div class="inner grid g2">
+        <div class="card"><h3 id="qualityTopTitle">Easiest shot diets</h3><p class="note">Mostly bigs living at the rim.</p><div class="tbl-wrap" id="qualityTop"></div></div>
+        <div class="card"><h3 id="qualityBottomTitle">Hardest shot diets</h3><p class="note">Mostly self-creators taking contested jumpers.</p><div class="tbl-wrap" id="qualityBottom"></div></div>
+      </div></details>
+  </section>
 
-  <!-- ================= B. Shot maps ================= -->
-  <h2 id="maps">Shot maps</h2>
-  <p class="lede">Every held-out shot from the dashboard seasons. Filters apply to all three maps and the zone table.</p>
-  <div class="filters" id="filters">
-    <label>Season <select id="fSeason"></select></label>
-    <label>Team <select id="fTeam"></select></label>
-    <label>Player <span style="display:flex;gap:4px"><input type="search" id="fPlayer" list="playerList" placeholder="Any player" autocomplete="off"><button class="ghost" id="fPlayerClear" type="button" aria-label="Clear player">&times;</button></span></label>
-    <datalist id="playerList"></datalist>
-    <label>Opponent <select id="fOpp"></select></label>
-    <label>Shot type <select id="fFamily"></select></label>
-    <label>Result <select id="fResult"><option value="all">All</option><option value="1">Made</option><option value="0">Missed</option></select></label>
-    <label>Color by <span class="seg" id="fMode" role="group">
-      <button type="button" data-mode="xfg" aria-pressed="true">xFG%</button>
-      <button type="button" data-mode="fg" aria-pressed="false">Actual FG%</button>
-      <button type="button" data-mode="diff" aria-pressed="false">Actual &minus; xFG</button></span></label>
-  </div>
-  <div class="summary" id="filterSummary"></div>
-  <div class="grid g2">
-    <div class="card"><h3>Zone map</h3><p class="note" id="zoneNote"></p>
-      <div class="chart court" id="zoneChart"></div>
-      <details class="tbl"><summary>Data table</summary><div class="tbl-wrap" id="zoneTable"></div></details></div>
-    <div class="card"><h3>Probability hex map</h3><p class="note">Hex size = shot volume, color = the selected measure. Hexes with very few shots are hidden.</p>
-      <div class="chart court" id="hexChart"></div></div>
-  </div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>Individual shots</h3><p class="note" id="scatterNote">Filled = made, hollow = missed, color = xFG%.</p>
-      <div class="chart court" id="scatterChart"></div></div>
-    <div class="card"><h3 id="zoneDeltaTitle">Where the selection beats the model</h3>
-      <p class="note">Actual FG% minus xFG% by zone (zones with 15+ attempts). Right = made more than the shot quality predicts.</p>
-      <div class="chart" id="zoneDeltaChart" style="min-height:440px"></div></div>
-  </div>
+  <!-- ================= 3. explore ================= -->
+  <section class="chapter" id="explore">
+    <div class="chap-head"><div class="chap-num">03</div>
+      <h2>Explore any player</h2>
+      <p class="lede">Pick a player to see where they shoot from, how hard those shots are, and where they beat the model.</p></div>
+    <div class="search-row">
+      <input type="search" id="fPlayer" list="playerList" placeholder="Search any player…" autocomplete="off" aria-label="Player">
+      <datalist id="playerList"></datalist>
+      <button class="ghost" id="fPlayerClear" type="button">Whole league</button>
+    </div>
+    <div class="chips" id="suggest"><span class="label">Try:</span></div>
+    <p class="player-line" id="playerLine"></p>
+    <div class="controls">
+      <label>Season <select id="fSeason"></select></label>
+      <label>Team <select id="fTeam"></select></label>
+      <label>Against <select id="fOpp"></select></label>
+      <label>Shot type <select id="fFamily"></select></label>
+      <label>Result <select id="fResult"><option value="all">All shots</option><option value="1">Makes</option><option value="0">Misses</option></select></label>
+      <label>Color the maps by <span class="seg" id="fMode" role="group">
+        <button type="button" data-mode="xfg" aria-pressed="true">How hard</button>
+        <button type="button" data-mode="fg" aria-pressed="false">How often it went in</button>
+        <button type="button" data-mode="diff" aria-pressed="false">Beat the odds</button></span></label>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h3>By zone</h3><p class="note" id="zoneNote"></p>
+        <div class="chart court" id="zoneChart"></div>
+        <details class="more"><summary>See the numbers</summary><div class="inner tbl-wrap" id="zoneTable"></div></details></div>
+      <div class="card"><h3>Hot spots</h3><p class="note">Bigger hexagon = more shots from there. Spots with only a handful of shots are hidden.</p>
+        <div class="chart court" id="hexChart"></div></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3>Every shot</h3><p class="note" id="scatterNote"></p>
+        <div class="chart court" id="scatterChart"></div></div>
+      <div class="card"><h3 id="zoneDeltaTitle">Where they beat the model</h3>
+        <p class="note">Actual make rate minus expected, by zone (zones with 15+ shots). Bars to the right = made more than the shots deserved.</p>
+        <div class="chart" id="zoneDeltaChart" style="min-height:440px"></div></div>
+    </div>
+  </section>
 
-  <!-- ================= C. xFG outliers ================= -->
-  <h2 id="outliers">xFG outliers</h2>
-  <p class="lede"><b>Shot quality</b> = how good a player's shots are on average; <b>shot-making</b> = how much they beat that.
-    Because the model never sees the shooter, the gap is the player's own skill (or luck).
-    <b>xFG</b> counts makes. <b>xPts</b> weights each shot by what it's worth (xPts = xFG% &times; 2 or 3), so beating
-    the model on threes counts more than on layups. <b>z</b> = over-expected total divided by what chance alone would produce
-    (1&sigma;), so |z| &gt; 2 is unlikely to be luck. Click any player to load them in the shot maps.</p>
-  <div class="filters" id="boardFilters">
-    <label>Measure <span class="seg" id="bMetric" role="group">
-      <button type="button" data-metric="xfg" aria-pressed="true">xFG (makes)</button>
-      <button type="button" data-metric="xpts" aria-pressed="false">xPts (points)</button></span></label>
-    <label>Scope <select id="bScope"></select></label>
-    <label>Zones <select id="bZone"></select></label>
-    <label>Min attempts <span style="display:flex;align-items:center;gap:8px"><input type="range" id="bMin" min="50" max="1500" step="50"><b id="bMinVal"></b></span></label>
-  </div>
-  <div class="card"><div class="row"><h3 id="boardTitle">Shot-making leaderboard</h3><button class="link" id="boardMore" type="button"></button></div>
-    <div class="tbl-wrap" id="boardTable"></div></div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>Shot quality vs shot-making</h3>
-      <p class="note">Each dot is a player (size = attempts). Lines at the medians.</p>
-      <div class="chart" id="quadChart" style="min-height:420px"></div></div>
-    <div class="card"><h3>Luck check</h3>
-      <p class="note">Every shot is a weighted coin flip (it goes in with probability xFG%), so even a shooter exactly as good as the model
-        assumes drifts above or below zero by chance. That drift grows with the square root of attempts: the shaded funnel is &plusmn;2&sigma;,
-        where a no-skill shooter lands ~95% of the time. Gray dots inside it could be luck; dots outside it probably aren't.</p>
-      <p class="note" id="luckNote"></p>
-      <div class="chart" id="luckChart" style="min-height:420px"></div></div>
-  </div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3 id="qualityTopTitle">Best shot diets</h3><div class="tbl-wrap" id="qualityTop"></div></div>
-    <div class="card"><h3 id="qualityBottomTitle">Toughest shot diets</h3><div class="tbl-wrap" id="qualityBottom"></div></div>
-  </div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><div class="row"><h3 id="toughTitle">Toughest makes</h3>
-      <label style="font-size:12.5px;color:var(--text-secondary)"><input type="checkbox" id="heaves"> include heaves (35+ ft, or 28+ ft in the last 3 s)</label></div>
-      <p class="note" id="toughNote"></p><div class="tbl-wrap" id="toughTable"></div></div>
-    <div class="card"><h3 id="easyTitle">Easiest misses</h3><p class="note" id="easyNote"></p><div class="tbl-wrap" id="easyTable"></div></div>
-  </div>
-  <div class="grid g2" style="margin-top:14px">
-    <div class="card"><h3>Team offense: shot-making</h3><p class="note">Over expected on the team's own shots.</p><div class="tbl-wrap" id="teamOff"></div></div>
-    <div class="card"><h3>Team defense: shot-making allowed</h3><p class="note">Opponents' total over expected (negative = opponents shot worse than their shot quality). Best defenses first.</p><div class="tbl-wrap" id="teamDef"></div></div>
-  </div>
+  <!-- ================= 4. moments ================= -->
+  <section class="chapter" id="moments">
+    <div class="chap-head"><div class="chap-num">04</div>
+      <h2>Shots to remember</h2>
+      <p class="lede">The makes nobody should have hit, and the misses nobody should have missed.</p></div>
+    <div class="stack">
+      <div class="card"><h3 id="toughTitle">Against all odds</h3><p class="note" id="toughNote"></p>
+        <label style="font-size:13px;color:var(--text-secondary);display:inline-flex;gap:6px;margin-bottom:8px"><input type="checkbox" id="heaves"> include heaves (35+ ft, or 28+ ft in the last 3 seconds)</label>
+        <div class="tbl-wrap" id="toughTable"></div></div>
+      <div class="card"><h3 id="easyTitle">How did that not go in?</h3><p class="note" id="easyNote"></p>
+        <div class="tbl-wrap" id="easyTable"></div></div>
+    </div>
+  </section>
+
+  <!-- ================= 5. teams ================= -->
+  <section class="chapter" id="teams">
+    <div class="chap-head"><div class="chap-num">05</div>
+      <h2>Teams</h2>
+      <p class="lede">The same idea for whole teams: how much better (or worse) a team shoots than its shots deserve, and how much its defense lets opponents beat the odds.</p></div>
+    <p class="insight" id="teamInsight"></p>
+    <div class="grid g2">
+      <div class="card"><h3>Offense: making their shots</h3><p class="note">Best shot-making first.</p><div class="tbl-wrap" id="teamOff"></div></div>
+      <div class="card"><h3>Defense: making opponents miss</h3><p class="note">Opponents' shot-making against them. Negative = opponents made fewer than expected. Best defense first.</p><div class="tbl-wrap" id="teamDef"></div></div>
+    </div>
+  </section>
+
+  <!-- ================= 6. model ================= -->
+  <section class="chapter" id="model">
+    <div class="chap-head"><div class="chap-num">06</div>
+      <h2>How the model works, and why you can trust it</h2>
+      <p class="lede">Everything above rests on one number per shot. Here's how it was made and how well it holds up.</p></div>
+    <div class="steps" id="steps"></div>
+    <div class="report" id="report"></div>
+    <div class="grid g2">
+      <div class="card"><h3>It stays sharp as the game changes</h3>
+        <p class="note">Prediction error each week (lower is better). The weekly-updated model stays ahead of a frozen copy and far ahead of just using each zone's average.</p>
+        <div class="chart" id="curveChart"></div>
+        <details class="more"><summary>Season by season</summary><div class="inner tbl-wrap" id="seasonMetricsTable"></div></details></div>
+      <div class="card"><h3>Its percentages mean what they say</h3>
+        <p class="note">Shots grouped by the model's estimate. When it says 40%, about 40% go in: every dot sits on the diagonal.</p>
+        <div class="chart" id="calChart"></div>
+        <details class="more"><summary>See the numbers</summary><div class="inner tbl-wrap" id="calTable"></div></details></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3>What it pays attention to</h3>
+        <p class="note">Which inputs move the estimate most. Shot type (dunk or jumper) and distance dominate.</p>
+        <div class="chart" id="impChart"></div>
+        <details class="more"><summary>See the numbers</summary><div class="inner tbl-wrap" id="impTable"></div></details></div>
+      <div class="card"><h3>Thirteen seasons of data</h3>
+        <p class="note">Shots per season, by the part each season played in training.</p>
+        <div class="chart" id="coverageChart"></div>
+        <details class="more"><summary>See the numbers</summary><div class="inner tbl-wrap" id="coverageTable"></div></details></div>
+    </div>
+    <details class="more" style="margin-top:16px"><summary>League make rate and three-point rate over time</summary>
+      <div class="inner grid g2">
+        <div class="card"><h3>League FG% by season</h3><div class="chart" id="fgTrendChart"></div></div>
+        <div class="card"><h3>Share of shots that are threes</h3><div class="chart" id="threeTrendChart"></div></div>
+      </div></details>
+    <details class="more" style="margin-top:12px"><summary>For the technically curious</summary>
+      <div class="inner card"><p class="note" style="max-width:none;color:var(--text-secondary)">
+        XGBoost binary classifier on 44 shooter-blind features: shot location (distance, angle, zone, area), shot type (grouped from the play-by-play
+        action type, plus driving/cutting/running flags), game situation (period, time left, home/away), the opponent's make rate allowed in that
+        zone from earlier games only, and the league's recent make rate in that zone. Trained on 2013-14 to 2020-21, early-stopped on 2021-22,
+        then walked forward one week at a time through 2022-23 to 2025-26: predict the week, log it, then continue boosting a few shallow,
+        low-learning-rate trees on a sliding window of recent weeks. "Prediction error" is log loss. The skill-or-luck band is &plusmn;2 standard
+        deviations of a sum of independent Bernoulli(xFG) outcomes (&times; shot value&sup2; when counting points); a player's verdict comes from
+        their own z-score. Leakage rules (no shooter inputs, past-only defense, predict-before-train) are enforced by automated tests.</p></div></details>
+  </section>
 
   <footer id="footer"></footer>
   <pre id="selfcheck" hidden></pre>
@@ -241,47 +389,46 @@ const pts = (v, d = 1) => v == null || isNaN(v) ? "–" : (v >= 0 ? "+" : "−")
 const sgn = (v, d = 1) => v == null || isNaN(v) ? "–" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(d);
 const int = v => v == null ? "–" : Math.round(v).toLocaleString();
 const clockStr = (period, m, s) => `${period > 4 ? "OT" + (period - 4) : "Q" + period} ${m}:${String(s).padStart(2, "0")}`;
-const dateStr = d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+const dateStr = d => new Date(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const seasonsText = s => s.length === 2 ? `${s[0]} and ${s[1]}` : s.join(", ");
+const el = id => document.getElementById(id);
+function setRich(node, parts) {   // parts: strings, or [text, "b"] for bold -- never innerHTML with data
+  node.replaceChildren(...parts.map(p => Array.isArray(p) ? Object.assign(document.createElement(p[1]), { textContent: p[0] }) : document.createTextNode(p)));
+}
 
 // ---------------- theme ----------------
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const isDark = () => tok("color-scheme") === "dark";
 const BLUE = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"];
-const RED = ["#fbe1e0", "#f6bdbc", "#ef9695", "#e86f6e", "#e34948", "#c23a3a", "#9e2d2d"];
 function seqScale() {
   const ramp = isDark() ? [...BLUE].reverse() : BLUE;
   return ramp.map((c, i) => [i / (ramp.length - 1), c]);
 }
 function divScale() {
-  const mid = tok("--div-mid");
-  const coldArm = ["#104281", "#256abf", "#5598e7", "#9ec5f4"];
-  const hotArm = ["#f6bdbc", "#e86f6e", "#c23a3a", "#9e2d2d"];
-  const stops = [...coldArm, mid, ...hotArm];
+  const stops = ["#104281", "#256abf", "#5598e7", "#9ec5f4", tok("--div-mid"), "#f6bdbc", "#e86f6e", "#c23a3a", "#9e2d2d"];
   return stops.map((c, i) => [i / (stops.length - 1), c]);
 }
-const XFG_RANGE = [0.25, 0.75];
+const XFG_RANGE = [0.25, 0.75], XPPS_RANGE = [0.7, 1.4];
 
 function baseLayout(extra = {}) {
-  const grid = tok("--grid"), axis = tok("--axis"), muted = tok("--text-muted");
-  const ax = { gridcolor: grid, linecolor: axis, zerolinecolor: axis, tickfont: { color: muted, size: 11 },
-               title: { font: { color: tok("--text-secondary"), size: 12 } }, automargin: true };
+  const ax = { gridcolor: tok("--grid"), linecolor: tok("--axis"), zerolinecolor: tok("--axis"), tickfont: { color: tok("--text-muted"), size: 11.5 },
+               title: { font: { color: tok("--text-secondary"), size: 12.5 } }, automargin: true };
   return Object.assign({
-    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: tok("--surface-1"),
-    font: { family: 'system-ui, -apple-system, "Segoe UI", sans-serif', color: tok("--text-secondary"), size: 12 },
+    paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: { family: 'system-ui, -apple-system, "Segoe UI", sans-serif', color: tok("--text-secondary"), size: 12.5 },
     margin: { l: 48, r: 16, t: 10, b: 40 }, showlegend: false,
-    legend: { orientation: "h", y: 1.12, x: 0, font: { size: 11.5, color: tok("--text-secondary") } },
-    hoverlabel: { bgcolor: tok("--surface-1"), bordercolor: tok("--axis"), font: { color: tok("--text-primary") } },
+    legend: { orientation: "h", y: 1.12, x: 0, font: { size: 12, color: tok("--text-secondary") } },
+    hoverlabel: { bgcolor: tok("--surface-1"), bordercolor: tok("--axis"), font: { color: tok("--text-primary"), size: 13 } },
     xaxis: { ...ax }, yaxis: { ...ax },
   }, extra);
 }
+const AX = () => baseLayout().xaxis;
 const PCONF = { displayModeBar: false, responsive: true };
-// `key`: when it changes (e.g. xFG <-> xPts), redraw from scratch -- Plotly.react keeps
-// some axis state (tick formats) across updates
-const PLOT_KEYS = {};
+const PLOT_KEYS = {};   // redraw from scratch when the key changes (Plotly.react keeps some axis state)
 function plot(id, traces, layout, key = "") {
   try {
-    const el = document.getElementById(id);
-    el.querySelector(".empty")?.remove();
+    const node = el(id);
+    node.querySelector(".empty")?.remove();
     if (PLOT_KEYS[id] !== undefined && PLOT_KEYS[id] !== key) Plotly.purge(id);
     PLOT_KEYS[id] = key;
     Plotly.react(id, traces, layout, PCONF);
@@ -290,19 +437,15 @@ function plot(id, traces, layout, key = "") {
 }
 function emptyChart(id, msg) {
   Plotly.purge(id);
-  const el = document.getElementById(id);
-  el.replaceChildren(Object.assign(document.createElement("div"), { className: "empty", textContent: msg }));
+  el(id).replaceChildren(Object.assign(document.createElement("div"), { className: "empty", textContent: msg }));
   CHECK.charts[id] = "empty: " + msg;
 }
-
-// direct end-labels: keep at least `gap` (fraction of the y-span) between neighbours
-function spreadLabels(anns, lo, hi, gap = 0.07) {
+function spreadLabels(anns, lo, hi, gap = 0.07) {   // keep end-labels from overlapping
   const d = (hi - lo) * gap, sorted = [...anns].sort((a, b) => a.y - b.y);
   for (let i = 1; i < sorted.length; i++) if (sorted[i].y - sorted[i - 1].y < d) sorted[i].y = sorted[i - 1].y + d;
   return anns;
 }
-// scatter labels: when two labels would sit on top of each other, push them to opposite sides of their dots
-function declutter(anns, xspan, yspan) {
+function declutter(anns, xspan, yspan) {   // nearby scatter labels go to opposite sides of their dots
   const placed = [];
   anns.sort((a, b) => b.y - a.y).forEach(a => {
     const hit = placed.find(p => Math.abs(p.x - a.x) < xspan * 0.16 && Math.abs(p.y - a.y) < yspan * 0.07);
@@ -314,73 +457,76 @@ function declutter(anns, xspan, yspan) {
   });
   return anns;
 }
-// long season axes: label every other season
 const seasonTicks = seasons => seasons.length > 8 ? { tickvals: seasons.filter((_, i) => i % 2 === 0) } : {};
-const LEGEND_BELOW = () => ({ orientation: "h", x: 0, y: -0.28, yanchor: "top", font: { size: 11.5, color: tok("--text-secondary") } });
+const LEGEND_BELOW = (y = -0.28) => ({ orientation: "h", x: 0, y, yanchor: "top", font: { size: 12, color: tok("--text-secondary") } });
 
 // ---------------- tables (textContent only) ----------------
-function renderTable(el, rows, cols, opts = {}) {
+function renderTable(target, rows, cols, opts = {}) {
   const table = document.createElement("table");
-  const thead = table.createTHead().insertRow();
+  const head = table.createTHead().insertRow();
   cols.forEach(c => {
     const th = document.createElement("th");
     th.textContent = c.label;
     if (c.left) th.className = "l";
+    if (c.title) th.title = c.title;
     if (opts.onSort && c.sortKey) {
       th.classList.add("sort");
       th.setAttribute("aria-sort", opts.sortKey === c.sortKey ? (opts.sortDir > 0 ? "ascending" : "descending") : "none");
       th.addEventListener("click", () => opts.onSort(c.sortKey));
     }
-    thead.appendChild(th);
+    head.appendChild(th);
   });
-  const tb = table.createTBody();
+  const body = table.createTBody();
   rows.forEach(r => {
-    const tr = tb.insertRow();
+    const tr = body.insertRow();
     if (opts.onRow) { tr.className = "click"; tr.tabIndex = 0; tr.addEventListener("click", () => opts.onRow(r));
                       tr.addEventListener("keydown", e => { if (e.key === "Enter") opts.onRow(r); }); }
     cols.forEach(c => {
       const td = tr.insertCell();
       const v = c.get(r);
-      td.textContent = c.fmt ? c.fmt(v, r) : v;
-      if (c.left) td.className = "l";
+      if (c.node) td.append(c.node(v, r)); else td.textContent = c.fmt ? c.fmt(v, r) : v;
+      if (c.left) td.classList.add("l");
+      if (c.cls) td.classList.add(c.cls);
       if (c.signed && typeof v === "number") td.classList.add(v >= 0 ? "pos" : "neg");
     });
   });
-  const el_ = typeof el === "string" ? document.getElementById(el) : el;
-  el_.replaceChildren(table);
+  (typeof target === "string" ? el(target) : target).replaceChildren(table);
+}
+
+// skill-or-luck verdict from a z-score (text + a dot, never color alone)
+function verdict(z) {
+  const [label, c] = z >= 3 ? ["Clearly skill", "--hot"] : z >= 2 ? ["Likely skill", "--hot"]
+    : z > -2 ? ["Could be luck", "--muted-mark"] : z > -3 ? ["Likely below par", "--cold"] : ["Clearly below par", "--cold"];
+  const span = document.createElement("span"); span.className = "verdict";
+  const dot = document.createElement("i"); dot.style.background = tok(c);
+  span.append(dot, label);
+  return span;
 }
 
 // ---------------- court ----------------
-function arcPts(r, a0, a1, cx = 0, cy = 0, n = 48) {
-  const pts_ = [];
-  for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; pts_.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); }
-  return pts_;
+function arcPts(r, a0, a1, n = 48) {
+  const out = [];
+  for (let i = 0; i <= n; i++) { const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180; out.push([r * Math.cos(a), r * Math.sin(a)]); }
+  return out;
 }
 const pathOf = p => "M " + p.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join(" L ");
 function courtShapes() {
   const line = { color: tok("--text-muted"), width: 1.2 };
-  const sh = (o) => Object.assign({ line, layer: "above", xref: "x", yref: "y" }, o);
+  const sh = o => Object.assign({ line, layer: "above", xref: "x", yref: "y" }, o);
   const cornerY = Math.sqrt(23.75 ** 2 - 22 ** 2), a0 = Math.atan2(cornerY, 22) * 180 / Math.PI;
   return [
-    sh({ type: "rect", x0: -25, x1: 25, y0: -5.25, y1: 41.75 }),
-    sh({ type: "rect", x0: -8, x1: 8, y0: -5.25, y1: 13.75 }),
-    sh({ type: "circle", x0: -6, x1: 6, y0: 7.75, y1: 19.75 }),
-    sh({ type: "path", path: pathOf(arcPts(4, 0, 180)) }),
-    sh({ type: "line", x0: -22, x1: -22, y0: -5.25, y1: cornerY }),
-    sh({ type: "line", x0: 22, x1: 22, y0: -5.25, y1: cornerY }),
+    sh({ type: "rect", x0: -25, x1: 25, y0: -5.25, y1: 41.75 }), sh({ type: "rect", x0: -8, x1: 8, y0: -5.25, y1: 13.75 }),
+    sh({ type: "circle", x0: -6, x1: 6, y0: 7.75, y1: 19.75 }), sh({ type: "path", path: pathOf(arcPts(4, 0, 180)) }),
+    sh({ type: "line", x0: -22, x1: -22, y0: -5.25, y1: cornerY }), sh({ type: "line", x0: 22, x1: 22, y0: -5.25, y1: cornerY }),
     sh({ type: "path", path: pathOf(arcPts(23.75, a0, 180 - a0)) }),
-    sh({ type: "circle", x0: -0.75, x1: 0.75, y0: -0.75, y1: 0.75 }),
-    sh({ type: "line", x0: -3, x1: 3, y0: -1.25, y1: -1.25 }),
+    sh({ type: "circle", x0: -0.75, x1: 0.75, y0: -0.75, y1: 0.75 }), sh({ type: "line", x0: -3, x1: 3, y0: -1.25, y1: -1.25 }),
   ];
 }
 function courtLayout(extra = {}) {
   const hidden = { visible: false, fixedrange: true, showgrid: false, zeroline: false };
-  return baseLayout(Object.assign({
-    margin: { l: 4, r: 4, t: 4, b: 4 }, plot_bgcolor: tok("--surface-1"),
-    xaxis: { ...hidden, range: [-25.5, 25.5] },
-    yaxis: { ...hidden, range: [-6, 41], scaleanchor: "x", scaleratio: 1 },
-    shapes: courtShapes(), height: 470,
-  }, extra));
+  return baseLayout(Object.assign({ margin: { l: 4, r: 4, t: 4, b: 4 },
+    xaxis: { ...hidden, range: [-25.5, 25.5] }, yaxis: { ...hidden, range: [-6, 41], scaleanchor: "x", scaleratio: 1 },
+    shapes: courtShapes(), height: 470 }, extra));
 }
 
 // ---------------- shots: decode typed columns ----------------
@@ -393,7 +539,11 @@ async function decodeShots() {
     SHOTS[k] = new T[col.dtype](await new Response(stream).arrayBuffer());
   }));
   SHOTS.n = DATA.shots.n;
+  SHOTS.val = SHOTS.zone.map(z => z >= 9 ? 3 : 2);   // zones 9+ are the threes and backcourt (see ZONE14)
 }
+const ZONE_GROUP_OF = z => z === 0 ? "Rim" : z <= 3 ? "Paint" : z <= 8 ? "Mid-Range" : z <= 10 ? "Corner 3" : "Above-Break 3";
+const FAMILY_NAMES = { dunk: "Dunk", layup: "Layup", putback: "Putback / tip", hook: "Hook shot", floater: "Floater", jump: "Jump shot",
+  pullup: "Pull-up jumper", stepback: "Step-back", fadeaway: "Fadeaway", turnaround: "Turnaround", other: "Other" };
 
 // ---------------- state ----------------
 const LK = DATA.meta.lookups;
@@ -417,264 +567,114 @@ function filteredIdx() {
   }
   return out;
 }
-const measureOf = (mode, made, xsum, n) => mode === "xfg" ? xsum / n : mode === "fg" ? made / n : (made - xsum) / n;
+const ALL = () => { const a = new Array(SHOTS.n); for (let i = 0; i < SHOTS.n; i++) a[i] = i; return a; };
+
 function colorSpec(mode, values) {
   if (mode === "diff") {
     const a = values.map(Math.abs).filter(isFinite).sort((x, y) => x - y);
-    const m = Math.max(0.03, a[Math.floor(a.length * 0.9)] || 0);   // 90th pct of |value|, symmetric
-    return { colorscale: divScale(), cmin: -m, cmax: m, title: "Actual − xFG", fmt: v => pts(v) + " pts" };
+    const m = Math.max(0.03, a[Math.floor(a.length * 0.9)] || 0);
+    return { colorscale: divScale(), cmin: -m, cmax: m, title: "Beat the odds", tick: "+.0%", fmt: v => pts(v) };
   }
-  return { colorscale: seqScale(), cmin: XFG_RANGE[0], cmax: XFG_RANGE[1], title: mode === "xfg" ? "xFG%" : "Actual FG%", fmt: v => pct(v) };
+  if (mode === "xpps") return { colorscale: seqScale(), cmin: XPPS_RANGE[0], cmax: XPPS_RANGE[1], title: "Pts/attempt", tick: ".1f", fmt: v => v.toFixed(2) };
+  return { colorscale: seqScale(), cmin: XFG_RANGE[0], cmax: XFG_RANGE[1], title: mode === "xfg" ? "Expected" : "Actual", tick: ".0%", fmt: v => pct(v) };
 }
-const colorbar = (spec) => ({ title: { text: spec.title, side: "right", font: { size: 11, color: tok("--text-secondary") } },
-  thickness: 10, len: 0.6, outlinewidth: 0, tickfont: { size: 10, color: tok("--text-muted") },
-  tickformat: spec.title === "Actual − xFG" ? "+.0%" : ".0%" });
-
-// ---------------- B. maps ----------------
-function renderMaps() {
-  const idx = filteredIdx(), s = SHOTS, n = idx.length;
-  let made = 0, xsum = 0;
-  for (const i of idx) { made += s.made[i]; xsum += s.xfg[i] / 1000; }
-  const sum = document.getElementById("filterSummary");
-  sum.replaceChildren();
-  [["Shots", int(n)], ["FG%", pct(made / n)], ["xFG%", pct(xsum / n)], ["Actual − xFG", pts((made - xsum) / n) + " pts"],
-   ["Makes over expected", sgn(made - xsum, 1)]].forEach(([k, v]) => {
-    const span = document.createElement("span"); span.append(k + ": ");
-    const b = document.createElement("b"); b.textContent = n ? v : "–"; span.append(b); sum.append(span);
-  });
-  if (!n) { ["zoneChart", "hexChart", "scatterChart", "zoneDeltaChart"].forEach(id => emptyChart(id, "No shots match these filters.")); return; }
-  renderZoneMap(idx);
-  renderHex(idx);
-  renderScatter(idx);
-  renderZoneDelta(idx);
-}
+const colorbar = spec => ({ title: { text: spec.title, side: "right", font: { size: 11.5, color: tok("--text-secondary") } },
+  thickness: 10, len: 0.6, outlinewidth: 0, tickfont: { size: 10.5, color: tok("--text-muted") }, tickformat: spec.tick });
 
 function zoneStats(idx) {
-  const nz = LK.zones.length, att = new Array(nz).fill(0), mk = new Array(nz).fill(0), xs = new Array(nz).fill(0);
-  for (const i of idx) { const z = SHOTS.zone[i]; att[z]++; mk[z] += SHOTS.made[i]; xs[z] += SHOTS.xfg[i] / 1000; }
-  return LK.zones.map((name, z) => ({ name, z, att: att[z], fg: mk[z] / att[z], xfg: xs[z] / att[z], diff: (mk[z] - xs[z]) / att[z] }));
+  const nz = LK.zones.length, att = new Array(nz).fill(0), mk = new Array(nz).fill(0), xs = new Array(nz).fill(0), p = new Array(nz).fill(0), xp = new Array(nz).fill(0);
+  for (const i of idx) { const z = SHOTS.zone[i], v = SHOTS.val[i], x = SHOTS.xfg[i] / 1000;
+    att[z]++; mk[z] += SHOTS.made[i]; xs[z] += x; p[z] += SHOTS.made[i] * v; xp[z] += x * v; }
+  return LK.zones.map((name, z) => ({ name, z, att: att[z], fg: mk[z] / att[z], xfg: xs[z] / att[z], diff: (mk[z] - xs[z]) / att[z],
+    pps: p[z] / att[z], xpps: xp[z] / att[z] }));
 }
 const MIN_ZONE = 15;
-function renderZoneMap(idx) {
-  const zs = zoneStats(idx), mode = state.mode, G = DATA.zones;
-  const val = zs.map(z => z.att >= MIN_ZONE ? (mode === "xfg" ? z.xfg : mode === "fg" ? z.fg : z.diff) : null);
+function drawZoneMap(id, zs, mode) {
+  const G = DATA.zones;
+  const pick = q => mode === "xfg" ? q.xfg : mode === "fg" ? q.fg : mode === "xpps" ? q.xpps : q.diff;
+  const val = zs.map(q => q.att >= MIN_ZONE ? pick(q) : null);
   const spec = colorSpec(mode, val.filter(v => v != null));
-  const z2 = G.cells.map(row => row.map(c => val[c]));
   const txt = G.cells.map(row => row.map(c => { const q = zs[c];
-    return q.att ? `<b>${q.name}</b><br>${int(q.att)} shots<br>FG% ${pct(q.fg)} · xFG% ${pct(q.xfg)}<br>Actual − xFG ${pts(q.diff)} pts` + (q.att < MIN_ZONE ? "<br><i>too few shots to color</i>" : "") : `<b>${q.name}</b><br>no shots`; }));
-  // one direct label per zone at its cell centroid
+    return q.att ? `<b>${q.name}</b><br>${int(q.att)} shots<br>expected ${pct(q.xfg)} · actual ${pct(q.fg)}<br>worth ${q.xpps.toFixed(2)} pts per attempt` + (q.att < MIN_ZONE ? "<br><i>too few shots to color</i>" : "") : `<b>${q.name}</b><br>no shots`; }));
   const cx = {}, cy = {}, cn = {};
   G.cells.forEach((row, yi) => row.forEach((c, xi) => { cx[c] = (cx[c] || 0) + G.x[xi] + 0.5; cy[c] = (cy[c] || 0) + G.y[yi] + 0.5; cn[c] = (cn[c] || 0) + 1; }));
   const ann = zs.filter(q => q.att >= MIN_ZONE && cn[q.z] && q.name !== "Backcourt").map(q => ({
-    x: cx[q.z] / cn[q.z], y: Math.min(cy[q.z] / cn[q.z], 36), text: spec.fmt(val[q.z]).replace(" pts", ""), showarrow: false,
-    font: { size: 11, color: tok("--text-primary") }, bgcolor: tok("--surface-1"), opacity: 0.85, borderpad: 2 }));
-  const t = { type: "heatmap", x: G.x.map(v => v + 0.5), y: G.y.map(v => v + 0.5), z: z2, text: txt, hovertemplate: "%{text}<extra></extra>",
-    colorscale: spec.colorscale, zmin: spec.cmin, zmax: spec.cmax, colorbar: colorbar(spec), hoverongaps: false };
-  plot("zoneChart", [t], courtLayout({ annotations: ann }));
-  document.getElementById("zoneNote").textContent =
-    mode === "diff" ? "Red = made more than the model expected, blue = fewer. Zones with <15 shots are left blank."
-                    : "Darker = higher probability. Zones with <15 shots are left blank.";
-  renderTable("zoneTable", zs.filter(q => q.att > 0), [
+    x: cx[q.z] / cn[q.z], y: Math.min(cy[q.z] / cn[q.z], 36), text: spec.fmt(val[q.z]), showarrow: false,
+    font: { size: 11.5, color: tok("--text-primary") }, bgcolor: tok("--surface-1"), opacity: 0.9, borderpad: 3 }));
+  plot(id, [{ type: "heatmap", x: G.x.map(v => v + 0.5), y: G.y.map(v => v + 0.5), z: G.cells.map(row => row.map(c => val[c])), text: txt,
+    hovertemplate: "%{text}<extra></extra>", colorscale: spec.colorscale, zmin: spec.cmin, zmax: spec.cmax, colorbar: colorbar(spec), hoverongaps: false }],
+    courtLayout({ annotations: ann }), mode);
+}
+
+// ---------------- 1. what makes a good shot ----------------
+function renderGoodShot() {
+  const all = ALL(), zs = zoneStats(all);
+  drawZoneMap("leagueZoneChart", zs, "xpps");
+  renderTable("leagueZoneTable", zs.filter(q => q.att).sort((a, b) => b.xpps - a.xpps), [
     { label: "Zone", left: true, get: r => r.name }, { label: "Shots", get: r => r.att, fmt: int },
-    { label: "FG%", get: r => r.fg, fmt: v => pct(v) }, { label: "xFG%", get: r => r.xfg, fmt: v => pct(v) },
-    { label: "Actual − xFG", get: r => r.diff, fmt: v => pts(v), signed: true }]);
-}
+    { label: "Expected make rate", get: r => r.xfg, fmt: v => pct(v) }, { label: "Points per attempt", get: r => r.xpps, fmt: v => v.toFixed(2) }]);
 
-function renderHex(idx) {
-  const S = 1.3, sq3 = Math.sqrt(3), bins = new Map(), s = SHOTS;
-  for (const i of idx) {
-    const x = s.x[i] / 10, y = s.y[i] / 10;
-    if (y > 40 || Math.abs(x) > 25.5) continue;
-    let q = (sq3 / 3 * x - y / 3) / S, r = (2 / 3 * y) / S, cxq = q, czr = r, cyv = -q - r;
-    let rx = Math.round(cxq), ry = Math.round(cyv), rz = Math.round(czr);
-    const dx = Math.abs(rx - cxq), dy = Math.abs(ry - cyv), dz = Math.abs(rz - czr);
-    if (dx > dy && dx > dz) rx = -ry - rz; else if (dy <= dz) rz = -rx - ry;
-    const key = rx * 1000 + rz;
-    let b = bins.get(key); if (!b) { b = { q: rx, r: rz, n: 0, m: 0, x: 0 }; bins.set(key, b); }
-    b.n++; b.m += s.made[i]; b.x += s.xfg[i] / 1000;
-  }
-  const minN = Math.max(3, Math.round(idx.length * 0.0004));
-  const hs = [...bins.values()].filter(b => b.n >= minN);
-  if (!hs.length) return emptyChart("hexChart", "Too few shots for a hex map; see individual shots.");
-  const counts = hs.map(b => b.n).sort((a, b) => a - b), ref = counts[Math.floor(counts.length * 0.9)] || 1;
-  const el = document.getElementById("hexChart"), pxPerFt = Math.max(6, (el.clientWidth - 8) / 51);
-  const mode = state.mode, val = hs.map(b => measureOf(mode, b.m, b.x, b.n)), spec = colorSpec(mode, val);
-  const t = { type: "scatter", mode: "markers",
-    x: hs.map(b => S * sq3 * (b.q + b.r / 2)), y: hs.map(b => S * 1.5 * b.r),
-    marker: { symbol: "hexagon", size: hs.map(b => pxPerFt * S * sq3 * 1.05 * Math.max(0.3, Math.min(1, Math.sqrt(b.n / ref)))),
-      color: val, colorscale: spec.colorscale, cmin: spec.cmin, cmax: spec.cmax, colorbar: colorbar(spec), line: { width: 0 } },
-    customdata: hs.map(b => [b.n, b.m / b.n, b.x / b.n, (b.m - b.x) / b.n]),
-    hovertemplate: "%{customdata[0]:,} shots<br>FG% %{customdata[1]:.1%} · xFG% %{customdata[2]:.1%}<br>Actual − xFG %{customdata[3]:+.1%}<extra></extra>" };
-  plot("hexChart", [t], courtLayout());
-}
+  // zone groups -> insight
+  const g = {};
+  zs.forEach(q => { const k = ZONE_GROUP_OF(q.z); g[k] = g[k] || { att: 0, x: 0, xp: 0 }; g[k].att += q.att; g[k].x += q.xfg * q.att || 0; g[k].xp += q.xpps * q.att || 0; });
+  Object.values(g).forEach(v => { v.xfg = v.x / v.att; v.xpps = v.xp / v.att; });
+  const byPts = Object.entries(g).sort((a, b) => b[1].xpps - a[1].xpps);
+  const rim = g["Rim"], mid = g["Mid-Range"], c3 = g["Corner 3"];
+  setRich(el("goodShotInsight"), [
+    "At the rim, shots go in ", [pct(rim.xfg, 0), "b"], " of the time. From mid-range, just ", [pct(mid.xfg, 0), "b"], ". A corner three goes in less often (",
+    pct(c3.xfg, 0), "), but because it's worth three it produces ", [c3.xpps.toFixed(2) + " points per attempt", "b"], " against ", mid.xpps.toFixed(2),
+    " for a mid-range jumper. Best to worst by points per attempt: ", byPts.map(([k, v]) => `${k} ${v.xpps.toFixed(2)}`).join(" · "), "."]);
 
-const SCATTER_MAX = 4000;
-function renderScatter(idx) {
-  const note = document.getElementById("scatterNote");
-  if (idx.length > SCATTER_MAX) {
-    note.textContent = "Filled = made, hollow = missed, color = xFG%.";
-    return emptyChart("scatterChart", `${int(idx.length)} shots selected. Pick a player (or narrow the filters to ≤ ${int(SCATTER_MAX)}) to see individual shots.`);
-  }
-  note.textContent = `${int(idx.length)} shots. Filled = made, hollow = missed, color = xFG%.`;
-  const s = SHOTS, spec = colorSpec("xfg", []);
-  const trace = (madeFlag, name, symbol) => {
-    const ii = idx.filter(i => s.made[i] === madeFlag);
-    return { type: "scattergl", mode: "markers", name,
-      x: ii.map(i => s.x[i] / 10), y: ii.map(i => s.y[i] / 10),
-      marker: { symbol, size: 8, color: ii.map(i => s.xfg[i] / 1000), colorscale: spec.colorscale, cmin: spec.cmin, cmax: spec.cmax,
-        line: { width: madeFlag ? 0.5 : 1.8, color: madeFlag ? tok("--surface-1") : undefined },
-        colorbar: madeFlag ? colorbar(spec) : undefined, showscale: !!madeFlag },
-      customdata: ii.map(i => { const c = s.clock[i], p = c >> 10, sec = c & 1023;
-        return [LK.players[s.player[i]], LK.teams[s.opp[i]], dateStr(LK.dates[s.date[i]]), LK.actions[s.action[i]],
-                clockStr(p, Math.floor(sec / 60), sec % 60), s.xfg[i] / 1000, s.dist[i]]; }),
-      hovertemplate: `<b>${name}</b> · xFG %{customdata[5]:.1%}<br>%{customdata[0]} vs %{customdata[1]}<br>%{customdata[3]}, %{customdata[6]} ft<br>%{customdata[2]} · %{customdata[4]}<extra></extra>` };
-  };
-  plot("scatterChart", [trace(0, "Missed", "circle-open"), trace(1, "Made", "circle")],
-       courtLayout({ showlegend: true, legend: { orientation: "h", x: 0, y: 1.02, font: { size: 11.5, color: tok("--text-secondary") } } }));
-}
+  // shot families
+  const fam = LK.families.map(() => ({ n: 0, x: 0 }));
+  for (let i = 0; i < SHOTS.n; i++) { const f = fam[SHOTS.family[i]]; f.n++; f.x += SHOTS.xfg[i] / 1000; }
+  const rows = LK.families.map((f, i) => ({ name: FAMILY_NAMES[f] || f, n: fam[i].n, xfg: fam[i].x / fam[i].n, share: fam[i].n / SHOTS.n }))
+    .filter(r => r.n >= 200).sort((a, b) => a.xfg - b.xfg);
+  const top = rows[rows.length - 1], jump = rows.find(r => r.name === "Jump shot"), pull = rows.find(r => r.name === "Pull-up jumper");
+  el("familyTitle").textContent = pull && jump && pull.xfg < jump.xfg
+    ? `A pull-up is ${pts(jump.xfg - pull.xfg, 0).replace("+", "")} points harder than a catch-and-shoot jumper`
+    : "How a shot is taken matters too";
+  plot("familyChart", [{ type: "bar", orientation: "h", y: rows.map(r => r.name), x: rows.map(r => r.xfg),
+    marker: { color: tok("--series-1"), line: { width: 0 } }, text: rows.map(r => `${pct(r.xfg, 0)}  ·  ${pct(r.share, 0)} of shots`),
+    textposition: "outside", cliponaxis: false, textfont: { size: 11.5, color: tok("--text-secondary") },
+    customdata: rows.map(r => r.n), hovertemplate: "<b>%{y}</b><br>expected make rate %{x:.1%}<br>%{customdata:,} shots<extra></extra>" }],
+    baseLayout({ height: 440, bargap: 0.35, margin: { l: 118, r: 28, t: 6, b: 36 },
+      xaxis: { ...AX(), tickformat: ".0%", range: [0, top.xfg * 1.55], title: { text: "Expected make rate" } },
+      yaxis: { ...baseLayout().yaxis, gridcolor: "rgba(0,0,0,0)" } }));
 
-function renderZoneDelta(idx) {
-  const zs = zoneStats(idx).filter(q => q.att >= MIN_ZONE).sort((a, b) => a.diff - b.diff);
-  const who = state.player >= 0 ? LK.players[state.player] : state.team >= 0 ? LK.teams[state.team] : "the selection";
-  document.getElementById("zoneDeltaTitle").textContent = `Where ${who} beats the model`;
-  if (!zs.length) return emptyChart("zoneDeltaChart", "No zone has 15+ shots in this selection.");
-  const t = { type: "bar", orientation: "h", y: zs.map(q => q.name), x: zs.map(q => q.diff),
-    marker: { color: zs.map(q => q.diff >= 0 ? tok("--hot") : tok("--cold")), line: { width: 0 } },
-    text: zs.map(q => pts(q.diff)), textposition: "outside", cliponaxis: false, textfont: { size: 11, color: tok("--text-secondary") },
-    customdata: zs.map(q => [q.att, q.fg, q.xfg]),
-    hovertemplate: "<b>%{y}</b><br>%{customdata[0]:,} shots<br>FG% %{customdata[1]:.1%} · xFG% %{customdata[2]:.1%}<br>Actual − xFG %{x:+.1%}<extra></extra>" };
-  const m = Math.max(0.02, ...zs.map(q => Math.abs(q.diff))) * 1.35;
-  plot("zoneDeltaChart", [t], baseLayout({ height: 440, bargap: 0.35, margin: { l: 130, r: 20, t: 6, b: 36 },
-    xaxis: { ...baseLayout().xaxis, range: [-m, m], tickformat: "+.0%", zeroline: true, zerolinewidth: 1.5, title: { text: "Actual FG% − xFG%" } },
-    yaxis: { ...baseLayout().yaxis, gridcolor: "rgba(0,0,0,0)" } }));
-}
-
-// ---------------- A. training ----------------
-function renderTraining() {
-  const T = DATA.training, M = T.metrics;
-  // tiles
-  const ov = M.online_overall, tiles = document.getElementById("tiles");
-  const tile = (label, value, cmp) => { const d = document.createElement("div"); d.className = "card tile";
-    [["label", label], ["value", value], ["cmp", cmp]].forEach(([c, t]) => { const e = document.createElement("div"); e.className = c; e.textContent = t; d.append(e); });
-    return d; };
-  const dashN = DATA.shots.n;
-  tiles.replaceChildren(
-    tile("Held-out log loss (weekly-updated)", ov.xfg.log_loss.toFixed(4), `frozen ${ov.xfg_frozen.log_loss.toFixed(4)} · zone average ${ov.xfg_zone.log_loss.toFixed(4)}`),
-    tile("Held-out AUC", ov.xfg.auc.toFixed(3), `frozen ${ov.xfg_frozen.auc.toFixed(3)} · zone average ${ov.xfg_zone.auc.toFixed(3)}`),
-    tile("Calibration, worst bin", pts(M.calibration.max_abs_gap) + " pts", "gap between predicted and actual make rate"),
-    tile("Shots on this dashboard", int(dashN), `${DATA.meta.seasons.join(" & ")} · trained on ${T.split.train[0]}–${T.split.stop}`));
-
-  // coverage by role
-  const roles = [["train", "Train", "--series-1"], ["early-stop", "Early-stop", "--series-2"], ["walk-forward", "Walk-forward", "--series-3"]];
-  const cov = T.coverage;
-  const covTraces = roles.map(([key, name, c]) => { const rs = cov.filter(r => r.role === key);
-    return { type: "bar", name, x: rs.map(r => r.season), y: rs.map(r => r.shots), marker: { color: tok(c), line: { width: 0 } },
-      customdata: rs.map(r => [r.games, r.fg_pct, r.dropped_no_location, r.on_dashboard ? "on this dashboard" : ""]),
-      hovertemplate: `<b>%{x}</b> · ${name}<br>%{y:,} shots · %{customdata[0]} games<br>FG% %{customdata[1]:.1%} · dropped %{customdata[2]}<br>%{customdata[3]}<extra></extra>` }; });
-  const dashAnn = cov.filter(r => r.on_dashboard).map(r => ({ x: r.season, y: r.shots, yshift: 10, text: "shown", showarrow: false,
-    font: { size: 10.5, color: tok("--text-secondary") } }));
-  plot("coverageChart", covTraces, baseLayout({ barmode: "overlay", bargap: 0.25, showlegend: true, annotations: dashAnn,
-    margin: { l: 56, r: 10, t: 30, b: 50 }, yaxis: { ...baseLayout().yaxis, tickformat: ".2s", rangemode: "tozero" },
-    xaxis: { ...baseLayout().xaxis, tickangle: -45, type: "category", gridcolor: "rgba(0,0,0,0)" } }));
-  renderTable("coverageTable", cov, [
-    { label: "Season", left: true, get: r => r.season }, { label: "Role", left: true, get: r => r.role },
-    { label: "Shots", get: r => r.shots, fmt: int }, { label: "Games", get: r => r.games, fmt: int },
-    { label: "FG%", get: r => r.fg_pct, fmt: v => pct(v) }, { label: "3PA rate", get: r => r.three_rate, fmt: v => pct(v) },
-    { label: "Dropped (no location)", get: r => r.dropped_no_location, fmt: int }]);
-
-  // learning curve: 3 series, legend + end labels
-  // insert a null between seasons so the off-season isn't drawn as a straight line
-  const lc = [];
-  T.learning_curve.forEach((r, i, a) => { if (i && r.season !== a[i - 1].season) lc.push({ gap: true, chunk_min_date: r.chunk_min_date, season: r.season }); lc.push(r); });
-  const x = lc.map(r => dateStr(String(r.chunk_min_date)));
-  const series = [["xfg_log_loss_roll", "Weekly-updated", "--series-1"], ["xfg_frozen_log_loss_roll", "Frozen", "--series-2"],
-                  ["xfg_zone_log_loss_roll", "Zone average", "--series-3"]];
-  const curve = series.map(([k, name, c]) => ({ type: "scatter", mode: "lines", name, x, y: lc.map(r => r[k]),
-    line: { color: tok(c), width: 2 }, connectgaps: false, hovertemplate: `${name} %{y:.4f}<extra></extra>` }));
-  const last = lc[lc.length - 1];
-  const allY = lc.flatMap(r => series.map(([k]) => r[k])).filter(v => v != null);
-  const endAnn = spreadLabels(series.map(([k, name]) => ({ x: x[x.length - 1], y: last[k], xanchor: "left", xshift: 6, text: name, showarrow: false,
-    font: { size: 11, color: tok("--text-secondary") } })), Math.min(...allY), Math.max(...allY));
-  // season boundaries
-  const firstOf = {}; lc.forEach((r, i) => { if (!r.gap && !(r.season in firstOf)) firstOf[r.season] = x[i]; });
-  const seasonLines = Object.entries(firstOf).slice(1).map(([s, d]) => ({ type: "line", x0: d, x1: d, yref: "paper", y0: 0, y1: 1, line: { color: tok("--grid"), width: 1 } }));
-  const seasonAnn = Object.entries(firstOf).map(([s, d]) => ({ x: d, yref: "paper", y: 1.0, xanchor: "left", yanchor: "bottom", text: s, showarrow: false, font: { size: 10.5, color: tok("--text-muted") } }));
-  plot("curveChart", curve, baseLayout({ hovermode: "x unified", showlegend: true, annotations: [...endAnn, ...seasonAnn], shapes: seasonLines,
-    margin: { l: 56, r: 100, t: 22, b: 40 }, legend: LEGEND_BELOW(), height: 320,
-    yaxis: { ...baseLayout().yaxis, title: { text: "Log loss" }, tickformat: ".3f" } }));
-
-  // season metrics
-  const sm = Object.entries(M.online_by_season).map(([s, v]) => ({ s, ...v }));
-  const smCols = [
-    { label: "Season", left: true, get: r => r.s + (DATA.meta.seasons.includes(r.s) ? " (shown)" : "") },
-    { label: "Shots", get: r => r.n, fmt: int }, { label: "FG%", get: r => r.actual_fg, fmt: v => pct(v) },
-    { label: "Mean xFG%", get: r => r.mean_xfg, fmt: v => pct(v) },
-    { label: "Weekly", get: r => r.xfg.log_loss, fmt: v => v.toFixed(4) }, { label: "Frozen", get: r => r.xfg_frozen.log_loss, fmt: v => v.toFixed(4) },
-    { label: "Zone avg", get: r => r.xfg_zone.log_loss, fmt: v => v.toFixed(4) }, { label: "AUC", get: r => r.xfg.auc, fmt: v => v.toFixed(3) }];
-  renderTable("seasonMetricsTable", sm, smCols);
-  renderTable("seasonMetricsTable2", sm, smCols);
-
-  // trends (separate charts: never dual-axis)
-  const trend = (id, key, title) => plot(id, [{ type: "scatter", mode: "lines+markers", x: cov.map(r => r.season), y: cov.map(r => r[key]),
-    line: { color: tok("--series-1"), width: 2 }, marker: { size: 8, color: tok("--series-1"), line: { width: 2, color: tok("--surface-1") } },
-    hovertemplate: `<b>%{x}</b><br>${title} %{y:.1%}<extra></extra>` }],
-    baseLayout({ margin: { l: 48, r: 10, t: 10, b: 50 }, xaxis: { ...baseLayout().xaxis, tickangle: -45, type: "category", gridcolor: "rgba(0,0,0,0)", ...seasonTicks(cov.map(r => r.season)) },
-                 yaxis: { ...baseLayout().yaxis, tickformat: ".1%" } }));
-  trend("fgTrendChart", "fg_pct", "FG%");
-  trend("threeTrendChart", "three_rate", "3PA rate");
-
+  // shot mix over time
+  const T = DATA.training, mixSeasons = [...new Set(T.zone_mix.map(r => r.SEASON))];
+  const share = (grp, s) => (T.zone_mix.find(r => r.zone_group === grp && r.SEASON === s) || {}).share;
+  const s0 = mixSeasons[0], s1 = mixSeasons[mixSeasons.length - 1];
+  const threes = s => (share("Corner 3", s) || 0) + (share("Above-Break 3", s) || 0);
+  el("mixTitle").textContent = "The league has figured this out";
+  setRich(el("mixNote"), ["Mid-range jumpers fell from ", [pct(share("Mid-Range", s0), 0), "b"], " of all shots in ", s0, " to ", [pct(share("Mid-Range", s1), 0), "b"],
+    ` in ${s1}, while threes grew from `, [pct(threes(s0), 0), "b"], " to ", [pct(threes(s1), 0), "b"], "."]);
   const mixColors = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5"];
-  const mixSeasons = [...new Set(T.zone_mix.map(r => r.SEASON))];
-  const mix = T.zone_groups.map((g, i) => { const rs = T.zone_mix.filter(r => r.zone_group === g);
-    return { type: "scatter", mode: "lines", name: g, x: rs.map(r => r.SEASON), y: rs.map(r => r.share), line: { color: tok(mixColors[i]), width: 2 },
-      hovertemplate: `${g} %{y:.1%}<extra></extra>` }; });
+  const mix = T.zone_groups.map((grp, i) => { const rs = T.zone_mix.filter(r => r.zone_group === grp);
+    return { type: "scatter", mode: "lines", name: grp, x: rs.map(r => r.SEASON), y: rs.map(r => r.share), line: { color: tok(mixColors[i]), width: 2.5 },
+      hovertemplate: `${grp} %{y:.1%}<extra></extra>` }; });
   const shares = T.zone_mix.map(r => r.share);
-  const mixEnd = spreadLabels(T.zone_groups.map((g, i) => { const rs = T.zone_mix.filter(r => r.zone_group === g); const r = rs[rs.length - 1];
-    return { x: r.SEASON, y: r.share, xanchor: "left", xshift: 5, text: g, showarrow: false, font: { size: 10.5, color: tok("--text-secondary") } }; }),
-    0, Math.max(...shares), 0.09);
-  plot("mixChart", mix, baseLayout({ hovermode: "x unified", showlegend: true, annotations: mixEnd, margin: { l: 44, r: 96, t: 10, b: 50 },
-    height: 330, legend: { ...LEGEND_BELOW(), y: -0.38 },
-    xaxis: { ...baseLayout().xaxis, tickangle: -45, type: "category", gridcolor: "rgba(0,0,0,0)", categoryarray: mixSeasons, ...seasonTicks(mixSeasons) },
+  const ends = spreadLabels(T.zone_groups.map(grp => { const rs = T.zone_mix.filter(r => r.zone_group === grp); const r = rs[rs.length - 1];
+    return { x: r.SEASON, y: r.share, xanchor: "left", xshift: 6, text: grp, showarrow: false, font: { size: 12, color: tok("--text-secondary") } }; }),
+    0, Math.max(...shares), 0.08);
+  plot("mixChart", mix, baseLayout({ hovermode: "x unified", showlegend: true, annotations: ends, height: 340, margin: { l: 48, r: 110, t: 10, b: 50 },
+    legend: LEGEND_BELOW(-0.3), xaxis: { ...AX(), type: "category", gridcolor: "rgba(0,0,0,0)", categoryarray: mixSeasons, ...seasonTicks(mixSeasons) },
     yaxis: { ...baseLayout().yaxis, tickformat: ".0%", rangemode: "tozero" } }));
-  renderTable("mixTable", T.zone_mix, [{ label: "Season", left: true, get: r => r.SEASON }, { label: "Zone group", left: true, get: r => r.zone_group },
-    { label: "Share of shots", get: r => r.share, fmt: v => pct(v) }, { label: "FG%", get: r => r.fg_pct, fmt: v => pct(v) }]);
-
-  // calibration
-  const cal = M.calibration, calRows = cal.predicted_mean_by_bin.map((p, i) => ({ p, a: cal.actual_frac_by_bin[i] }));
-  const lo = Math.min(...cal.predicted_mean_by_bin, ...cal.actual_frac_by_bin) - 0.03, hi = Math.max(...cal.predicted_mean_by_bin, ...cal.actual_frac_by_bin) + 0.03;
-  plot("calChart", [
-    { type: "scatter", mode: "lines", x: [lo, hi], y: [lo, hi], line: { color: tok("--axis"), width: 1.5 }, hoverinfo: "skip" },
-    { type: "scatter", mode: "lines+markers", x: calRows.map(r => r.p), y: calRows.map(r => r.a), line: { color: tok("--series-1"), width: 2 },
-      marker: { size: 9, color: tok("--series-1"), line: { width: 2, color: tok("--surface-1") } },
-      hovertemplate: "predicted %{x:.1%}<br>actual %{y:.1%}<extra></extra>" }],
-    baseLayout({ margin: { l: 52, r: 10, t: 10, b: 44 },
-      xaxis: { ...baseLayout().xaxis, tickformat: ".0%", title: { text: "Predicted (xFG%)" }, range: [lo, hi] },
-      yaxis: { ...baseLayout().yaxis, tickformat: ".0%", title: { text: "Actual FG%" }, range: [lo, hi] } }));
-  renderTable("calTable", calRows, [{ label: "Bin", left: true, get: r => calRows.indexOf(r) + 1 },
-    { label: "Predicted", get: r => r.p, fmt: v => pct(v) }, { label: "Actual", get: r => r.a, fmt: v => pct(v) },
-    { label: "Gap (pts)", get: r => r.a - r.p, fmt: v => pts(v), signed: true }]);
-
-  // importance
-  const imp = T.feature_importance.slice(0, 15).reverse();
-  const nice = f => f.replace(/^action_/, "shot type: ").replace(/^zone_/, "zone: ").replace(/^area_/, "area: ").replace(/_/g, " ");
-  plot("impChart", [{ type: "bar", orientation: "h", y: imp.map(r => nice(r.feature)), x: imp.map(r => r.gain),
-    marker: { color: tok("--series-1"), line: { width: 0 } }, hovertemplate: "%{y}<br>gain %{x:,.0f}<extra></extra>" }],
-    baseLayout({ height: 400, bargap: 0.3, margin: { l: 150, r: 12, t: 6, b: 36 }, yaxis: { ...baseLayout().yaxis, gridcolor: "rgba(0,0,0,0)" },
-                 xaxis: { ...baseLayout().xaxis, title: { text: "Gain" } } }));
-  renderTable("impTable", T.feature_importance, [{ label: "Feature", left: true, get: r => nice(r.feature) }, { label: "Gain", get: r => r.gain, fmt: v => v.toFixed(1) }]);
+  renderTable("mixTable", T.zone_mix, [{ label: "Season", left: true, get: r => r.SEASON }, { label: "Part of the floor", left: true, get: r => r.zone_group },
+    { label: "Share of shots", get: r => r.share, fmt: v => pct(v) }, { label: "Make rate", get: r => r.fg_pct, fmt: v => pct(v) }]);
 }
 
-// ---------------- C. outliers ----------------
-// one switch drives the whole section: xFG (makes) or xPts (points = xFG x 2 or 3)
+// ---------------- 2. who beats the odds ----------------
 const METRICS = {
-  xfg: { act: "fg_pct", q: "xfg_pct", oe: "fg_oe", total: "makes_oe", z: "z", sd: "sd_makes",
-         actLabel: "FG%", qLabel: "xFG%", oeLabel: "FG% − xFG%", totalLabel: "Makes over exp.",
-         fmtAct: v => pct(v), fmtOe: v => pts(v), fmtOeAxis: "+.0%", fmtQAxis: ".0%",
-         qTitle: "Shot quality (avg xFG%)", oeTitle: "Shot-making (FG% − xFG%)" },
-  xpts: { act: "pps", q: "xpps", oe: "pps_oe", total: "pts_oe", z: "z_pts", sd: "sd_pts",
-          actLabel: "Pts/shot", qLabel: "xPts/shot", oeLabel: "Pts − xPts /shot", totalLabel: "Points over exp.",
-          fmtAct: v => v == null ? "–" : v.toFixed(3), fmtOe: v => sgn(v, 3), fmtOeAxis: ".2f"  /* Plotly 2.32 ignores "+" with fixed-point formats */, fmtQAxis: ".2f",
-          qTitle: "Shot quality (expected points per shot)", oeTitle: "Shot-making (points − xPts per shot)" },
+  xfg: { act: "fg_pct", q: "xfg_pct", oe: "fg_oe", total: "makes_oe", z: "z", sd: "sd_makes", unit: "makes",
+         actLabel: "Made", qLabel: "Expected", oeLabel: "Beat the odds by", totalLabel: "Extra makes",
+         fmtAct: v => pct(v), fmtOe: v => pts(v) + " pts", fmtOeAxis: "+.0%", fmtQAxis: ".0%",
+         qTitle: "Shot difficulty: expected make rate (easier →)", oeTitle: "Shot-making: actual − expected" },
+  xpts: { act: "pps", q: "xpps", oe: "pps_oe", total: "pts_oe", z: "z_pts", sd: "sd_pts", unit: "points",
+          actLabel: "Pts/shot", qLabel: "Expected pts/shot", oeLabel: "Beat the odds by", totalLabel: "Extra points",
+          fmtAct: v => v == null ? "–" : v.toFixed(2), fmtOe: v => sgn(v, 2) + " /shot", fmtOeAxis: ".2f", fmtQAxis: ".2f",
+          qTitle: "Shot quality: expected points per shot (better →)", oeTitle: "Shot-making: points − expected, per shot" },
 };
 const SORT_TWIN = { fg_pct: "pps", xfg_pct: "xpps", fg_oe: "pps_oe", makes_oe: "pts_oe", z: "z_pts" };
 const SORT_TWIN_BACK = Object.fromEntries(Object.entries(SORT_TWIN).map(([k, v]) => [v, k]));
@@ -691,204 +691,408 @@ function selectPlayer(name) {
   const i = playerIndex.get(name);
   if (i == null) return;
   state.player = i; state.team = -1;
-  document.getElementById("fPlayer").value = name; document.getElementById("fTeam").value = "-1";
-  renderMaps();
-  document.getElementById("maps").scrollIntoView({ behavior: "smooth" });
+  el("fPlayer").value = name; el("fTeam").value = "-1";
+  renderExplore();
+  el("explore").scrollIntoView();
+}
+function renderPodium(rows) {
+  const m = M_(), top = [...rows].sort((a, b) => b[m.total] - a[m.total]).slice(0, 3);
+  el("podium").replaceChildren(...top.map((r, i) => {
+    const b = document.createElement("button"); b.className = "pod"; b.type = "button";
+    const add = (cls, text) => { const d = document.createElement("div"); d.className = cls; d.textContent = text; b.append(d); return d; };
+    add("rank", ["Biggest over-achiever", "Second", "Third"][i]);
+    const name = add("name", r.PLAYER_NAME);
+    name.append(Object.assign(document.createElement("span"), { className: "team", textContent: r.team || "" }));
+    add("headline", `${sgn(r[m.total], 0)} ${m.unit}`);
+    add("explain", state.metric === "xfg"
+      ? `hit ${pct(r.fg_pct)} of ${int(r.attempts)} shots. An average player taking the same shots would hit ${pct(r.xfg_pct)}.`
+      : `scored ${r.pps.toFixed(2)} points per shot over ${int(r.attempts)} shots. The same shots are worth ${r.xpps.toFixed(2)} to an average player.`);
+    b.addEventListener("click", () => selectPlayer(r.PLAYER_NAME));
+    return b; }));
 }
 function renderBoards() {
   const m = M_(), rows = boardRows();
-  document.getElementById("bMinVal").textContent = int(state.minAtt);
-  document.getElementById("boardTitle").textContent = state.metric === "xfg"
-    ? "Shot-making leaderboard (makes over expected)" : "Shot-making leaderboard (points over expected)";
+  el("bMinVal").textContent = int(state.minAtt);
+  el("boardTitle").textContent = state.metric === "xfg" ? "Everyone, ranked by extra makes" : "Everyone, ranked by extra points";
+  renderPodium(rows);
   const sorted = [...rows].sort((a, b) => state.sortDir * ((a[state.sortKey] ?? -1e9) - (b[state.sortKey] ?? -1e9)));
-  const shown = state.showAll ? sorted : sorted.slice(0, 25);
-  const more = document.getElementById("boardMore");
-  more.textContent = sorted.length > 25 ? (state.showAll ? "Show top 25" : `Show all ${sorted.length}`) : "";
+  const shown = state.showAll ? sorted : sorted.slice(0, 15);
+  el("boardCount").textContent = `${int(sorted.length)} players with at least ${int(state.minAtt)} shots`;
+  el("boardMore").textContent = sorted.length > 15 ? (state.showAll ? "Show top 15" : `Show all ${sorted.length}`) : "";
   const onSort = k => { state.sortDir = state.sortKey === k ? -state.sortDir : -1; state.sortKey = k; renderBoards(); };
   renderTable("boardTable", shown, [
-    { label: "#", get: r => sorted.indexOf(r) + 1 }, { label: "Player", left: true, get: r => r.PLAYER_NAME },
+    { label: "#", get: r => sorted.indexOf(r) + 1 }, { label: "Player", left: true, cls: "name", get: r => r.PLAYER_NAME },
     { label: "Team", left: true, get: r => r.team || "" },
-    { label: "FGA", get: r => r.attempts, fmt: int, sortKey: "attempts" },
-    { label: "3PA rate", get: r => r.three_rate, fmt: v => pct(v, 0), sortKey: "three_rate" },
+    { label: "Shots", get: r => r.attempts, fmt: int, sortKey: "attempts" },
+    { label: "Threes", get: r => r.three_rate, fmt: v => pct(v, 0), sortKey: "three_rate", title: "Share of shots that were threes" },
+    { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct, sortKey: m.q, title: "What an average player would make on these shots" },
     { label: m.actLabel, get: r => r[m.act], fmt: m.fmtAct, sortKey: m.act },
-    { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct, sortKey: m.q },
-    { label: m.oeLabel, get: r => r[m.oe], fmt: m.fmtOe, signed: true, sortKey: m.oe },
-    { label: m.totalLabel, get: r => r[m.total], fmt: v => sgn(v), signed: true, sortKey: m.total },
-    { label: "z", get: r => r[m.z], fmt: v => sgn(v, 1), signed: true, sortKey: m.z }],
+    { label: m.totalLabel, get: r => r[m.total], fmt: v => sgn(v, 0), signed: true, sortKey: m.total },
+    { label: "Skill or luck?", left: true, get: r => r[m.z], node: v => verdict(v), sortKey: m.z }],
     { onSort, sortKey: state.sortKey, sortDir: state.sortDir, onRow: r => selectPlayer(r.PLAYER_NAME) });
 
-  const qCols = [{ label: "Player", left: true, get: r => r.PLAYER_NAME }, { label: "Team", left: true, get: r => r.team || "" },
-    { label: "FGA", get: r => r.attempts, fmt: int }, { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct },
-    { label: "Avg dist", get: r => r.avg_dist, fmt: v => v == null ? "–" : v.toFixed(1) + " ft" },
-    { label: m.oeLabel, get: r => r[m.oe], fmt: m.fmtOe, signed: true }];
+  const qCols = [{ label: "Player", left: true, cls: "name", get: r => r.PLAYER_NAME }, { label: "Team", left: true, get: r => r.team || "" },
+    { label: "Shots", get: r => r.attempts, fmt: int }, { label: "Avg distance", get: r => r.avg_dist, fmt: v => v == null ? "–" : v.toFixed(1) + " ft" },
+    { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct }, { label: m.oeLabel, get: r => r[m.oe], fmt: m.fmtOe, signed: true }];
   const byQ = [...rows].sort((a, b) => b[m.q] - a[m.q]);
-  document.getElementById("qualityTopTitle").textContent = `Best shot diets (highest ${m.qLabel})`;
-  document.getElementById("qualityBottomTitle").textContent = `Toughest shot diets (lowest ${m.qLabel})`;
   renderTable("qualityTop", byQ.slice(0, 10), qCols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
   renderTable("qualityBottom", byQ.slice(-10).reverse(), qCols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
 
   if (rows.length < 3) { emptyChart("quadChart", "Not enough players at this minimum."); emptyChart("luckChart", "Not enough players at this minimum."); }
   else { renderQuad(rows); renderLuck(rows); }
-
-  const B = DATA.leaderboards.boards[state.scope];
-  const tCols = signed => [{ label: "Team", left: true, get: r => r.team }, { label: "FGA", get: r => r.attempts, fmt: int },
-    { label: m.actLabel, get: r => r[m.act], fmt: m.fmtAct }, { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct },
-    { label: m.oeLabel, get: r => r[m.oe], fmt: m.fmtOe, signed }, { label: m.totalLabel, get: r => r[m.total], fmt: v => sgn(v), signed },
-    { label: "z", get: r => r[m.z], fmt: v => sgn(v, 1), signed }];
-  renderTable("teamOff", [...B.team_offense].sort((a, b) => b[m.total] - a[m.total]), tCols(true));
-  renderTable("teamDef", [...B.team_defense].sort((a, b) => a[m.total] - b[m.total]), tCols(false));
 }
 const median = a => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
 function renderQuad(rows) {
-  const m = M_();
-  const xs = rows.map(r => r[m.q]), ys = rows.map(r => r[m.oe]);
+  const m = M_(), xs = rows.map(r => r[m.q]), ys = rows.map(r => r[m.oe]);
   const mx = median(xs), my = median(ys), maxA = Math.max(...rows.map(r => r.attempts));
   const label = new Set([...rows].sort((a, b) => b[m.total] - a[m.total]).slice(0, 5).map(r => r.PLAYER_NAME)
     .concat([...rows].sort((a, b) => a[m.total] - b[m.total]).slice(0, 3).map(r => r.PLAYER_NAME)));
-  const t = { type: "scatter", mode: "markers", x: xs, y: ys,
-    marker: { size: rows.map(r => 6 + 12 * Math.sqrt(r.attempts / maxA)), color: tok("--series-1"), opacity: 0.75, line: { width: 1.5, color: tok("--surface-1") } },
-    customdata: rows.map(r => [r.PLAYER_NAME, r.team || "", r.attempts, m.fmtAct(r[m.act]), m.fmtAct(r[m.q]), m.fmtOe(r[m.oe])]),
-    hovertemplate: `<b>%{customdata[0]}</b> %{customdata[1]}<br>%{customdata[2]:,} FGA<br>${m.qLabel} %{customdata[4]} · ${m.actLabel} %{customdata[3]}<br>${m.oeLabel} %{customdata[5]}<extra></extra>` };
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   const padx = (x1 - x0) * 0.08, pady = (y1 - y0) * 0.1;
   const ann = declutter(rows.filter(r => label.has(r.PLAYER_NAME)).map(r => ({ x: r[m.q], y: r[m.oe], text: r.PLAYER_NAME, showarrow: false,
-    yshift: 12, font: { size: 10.5, color: tok("--text-primary") } })), x1 - x0, y1 - y0);
-  const corner = (x, y, text, xa, ya) => ({ x, y, text, showarrow: false, xanchor: xa, yanchor: ya, font: { size: 10.5, color: tok("--text-muted") } });
-  ann.push(corner(x1 + padx, y1 + pady, "easy shots, made more", "right", "top"), corner(x0 - padx, y1 + pady, "hard shots, made more", "left", "top"),
-           corner(x1 + padx, y0 - pady, "easy shots, made fewer", "right", "bottom"), corner(x0 - padx, y0 - pady, "hard shots, made fewer", "left", "bottom"));
+    yshift: 12, font: { size: 11, color: tok("--text-primary") } })), x1 - x0, y1 - y0);
+  const corner = (x, y, text, xa, ya) => ({ x, y, text, showarrow: false, xanchor: xa, yanchor: ya, font: { size: 11, color: tok("--text-muted") } });
+  ann.push(corner(x1 + padx, y1 + pady, "easy shots, made more", "right", "top"), corner(x0 - padx, y1 + pady, "hard shots, made anyway", "left", "top"),
+           corner(x1 + padx, y0 - pady, "easy shots, missed", "right", "bottom"), corner(x0 - padx, y0 - pady, "hard shots, missed", "left", "bottom"));
   const ml = { color: tok("--axis"), width: 1 };
-  plot("quadChart", [t], baseLayout({ height: 420, annotations: ann, margin: { l: 60, r: 14, t: 10, b: 44 },
-    shapes: [{ type: "line", x0: mx, x1: mx, yref: "paper", y0: 0, y1: 1, line: ml }, { type: "line", y0: my, y1: my, xref: "paper", x0: 0, x1: 1, line: ml }],
-    xaxis: { ...baseLayout().xaxis, tickformat: m.fmtQAxis, title: { text: m.qTitle }, range: [x0 - padx, x1 + padx] },
-    yaxis: { ...baseLayout().yaxis, tickformat: m.fmtOeAxis, title: { text: m.oeTitle }, range: [y0 - pady, y1 + pady] } }), state.metric);
-  const el = document.getElementById("quadChart");
-  el.removeAllListeners?.("plotly_click");
-  el.on?.("plotly_click", ev => selectPlayer(ev.points[0].customdata[0]));
+  plot("quadChart", [{ type: "scatter", mode: "markers", x: xs, y: ys,
+    marker: { size: rows.map(r => 6 + 12 * Math.sqrt(r.attempts / maxA)), color: tok("--series-1"), opacity: 0.72, line: { width: 1.5, color: tok("--surface-1") } },
+    customdata: rows.map(r => [r.PLAYER_NAME, r.team || "", r.attempts, m.fmtAct(r[m.act]), m.fmtAct(r[m.q]), m.fmtOe(r[m.oe])]),
+    hovertemplate: `<b>%{customdata[0]}</b> %{customdata[1]}<br>%{customdata[2]:,} shots<br>expected %{customdata[4]} · actual %{customdata[3]}<br>%{customdata[5]}<extra></extra>` }],
+    baseLayout({ height: 420, annotations: ann, margin: { l: 64, r: 14, t: 10, b: 48 },
+      shapes: [{ type: "line", x0: mx, x1: mx, yref: "paper", y0: 0, y1: 1, line: ml }, { type: "line", y0: my, y1: my, xref: "paper", x0: 0, x1: 1, line: ml }],
+      xaxis: { ...AX(), tickformat: m.fmtQAxis, title: { text: m.qTitle }, range: [x0 - padx, x1 + padx] },
+      yaxis: { ...baseLayout().yaxis, tickformat: m.fmtOeAxis, title: { text: m.oeTitle }, range: [y0 - pady, y1 + pady] } }), state.metric);
+  const node = el("quadChart"); node.removeAllListeners?.("plotly_click");
+  node.on?.("plotly_click", ev => selectPlayer(ev.points[0].customdata[0]));
 }
 function renderLuck(rows) {
   const m = M_();
-  // funnel: pooled per-shot chance variance of the players shown -> ±2σ = 2·sqrt(n·var)
   const perShotVar = rows.reduce((s, r) => s + r[m.sd] ** 2, 0) / rows.reduce((s, r) => s + r.attempts, 0);
   const maxA = Math.max(...rows.map(r => r.attempts)) * 1.05, nx = 60;
   const bx = Array.from({ length: nx + 1 }, (_, i) => maxA * i / nx), band = bx.map(n => 2 * Math.sqrt(n * perShotVar));
-  const groups = [["Beyond +2σ (hot)", r => r[m.z] > 2, "--hot"], ["Within ±2σ (could be luck)", r => Math.abs(r[m.z]) <= 2, "--muted-mark"],
-                  ["Beyond −2σ (cold)", r => r[m.z] < -2, "--cold"]];
+  const groups = [["Beyond luck: better", r => r[m.z] > 2, "--hot"], ["Could be luck", r => Math.abs(r[m.z]) <= 2, "--muted-mark"],
+                  ["Beyond luck: worse", r => r[m.z] < -2, "--cold"]];
   const traces = [
     { type: "scatter", mode: "lines", x: bx, y: band, line: { width: 0 }, hoverinfo: "skip", showlegend: false },
-    { type: "scatter", mode: "lines", x: bx, y: band.map(v => -v), fill: "tonexty", fillcolor: isDark() ? "rgba(255,255,255,0.06)" : "rgba(11,11,11,0.05)",
+    { type: "scatter", mode: "lines", x: bx, y: band.map(v => -v), fill: "tonexty", fillcolor: isDark() ? "rgba(255,255,255,0.06)" : "rgba(17,17,16,0.05)",
       line: { width: 0 }, hoverinfo: "skip", showlegend: false },
     ...groups.map(([name, f, c]) => { const rs = rows.filter(f);
       return { type: "scatter", mode: "markers", name, x: rs.map(r => r.attempts), y: rs.map(r => r[m.total]),
         marker: { size: 8, color: tok(c), line: { width: 1.5, color: tok("--surface-1") } },
-        customdata: rs.map(r => [r.PLAYER_NAME, r.team || "", r[m.z], r[m.sd]]),
-        hovertemplate: `<b>%{customdata[0]}</b> %{customdata[1]}<br>%{x:,} FGA · ${m.totalLabel.toLowerCase()} %{y:+.1f}<br>chance alone: ±%{customdata[3]:.1f} (1σ) · z %{customdata[2]:+.1f}<extra></extra>` }; })];
+        customdata: rs.map(r => [r.PLAYER_NAME, r.team || "", r[m.sd] * 2]),
+        hovertemplate: `<b>%{customdata[0]}</b> %{customdata[1]}<br>%{x:,} shots · %{y:+.0f} ${m.unit}<br>luck alone could explain ±%{customdata[2]:.0f}<extra></extra>` }; })];
   const tot = rows.map(r => r[m.total]);
   const top = [...rows].sort((a, b) => Math.abs(b[m.z]) - Math.abs(a[m.z])).slice(0, 5);
   const ann = declutter(top.map(r => ({ x: r.attempts, y: r[m.total], text: r.PLAYER_NAME, showarrow: false, yshift: r[m.total] >= 0 ? 12 : -12,
-    font: { size: 10.5, color: tok("--text-primary") } })), maxA, Math.max(...tot) - Math.min(...tot));
+    font: { size: 11, color: tok("--text-primary") } })), maxA, Math.max(...tot) - Math.min(...tot));
   const nOut = rows.filter(r => Math.abs(r[m.z]) > 2).length, expected = Math.round(rows.length * 0.0455);
-  document.getElementById("luckNote").textContent = nOut > 2 * expected
-    ? `${nOut} of ${rows.length} players sit outside ±2σ, where pure chance would put about ${expected}. Shot-making skill is real and varies a lot between players; the further outside the funnel, the more certain.`
-    : `${nOut} of ${rows.length} players sit outside ±2σ, about what pure chance would produce (${expected}). At this cut, differences are hard to tell from luck.`;
-  plot("luckChart", traces, baseLayout({ height: 420, showlegend: true, annotations: ann, margin: { l: 60, r: 14, t: 30, b: 44 },
-    xaxis: { ...baseLayout().xaxis, title: { text: "Attempts" }, rangemode: "tozero" },
-    yaxis: { ...baseLayout().yaxis, title: { text: m.totalLabel.replace(" exp.", " expected") }, zeroline: true } }), state.metric);
-  const el = document.getElementById("luckChart");
-  el.removeAllListeners?.("plotly_click");
-  el.on?.("plotly_click", ev => ev.points[0].customdata && selectPlayer(ev.points[0].customdata[0]));
+  setRich(el("luckNote"), nOut > 2 * expected
+    ? [[`${nOut} of ${rows.length}`, "b"], ` players land outside the band. Luck alone would put about ${expected} there, so shot-making really does differ from player to player.`]
+    : [[`${nOut} of ${rows.length}`, "b"], ` players land outside the band, about what luck alone would produce (${expected}). With these filters, it's hard to separate skill from luck.`]);
+  plot("luckChart", traces, baseLayout({ height: 400, showlegend: true, annotations: ann, legend: { ...baseLayout().legend, traceorder: "normal" }, margin: { l: 64, r: 14, t: 30, b: 48 },
+    xaxis: { ...AX(), title: { text: "Shots taken" }, rangemode: "tozero" },
+    yaxis: { ...baseLayout().yaxis, title: { text: m.totalLabel }, zeroline: true } }), state.metric);
+  const node = el("luckChart"); node.removeAllListeners?.("plotly_click");
+  node.on?.("plotly_click", ev => ev.points[0].customdata && selectPlayer(ev.points[0].customdata[0]));
 }
-function renderOutliers() {
+
+// ---------------- 3. explore ----------------
+function renderExplore() {
+  const idx = filteredIdx(), s = SHOTS, n = idx.length;
+  let made = 0, xsum = 0, p = 0, xp = 0;
+  for (const i of idx) { const x = s.xfg[i] / 1000; made += s.made[i]; xsum += x; p += s.made[i] * s.val[i]; xp += x * s.val[i]; }
+  document.querySelectorAll("#suggest .chip").forEach(c => c.setAttribute("aria-pressed", String(state.player >= 0 && c.textContent === LK.players[state.player])));
+  const who = state.player >= 0 ? LK.players[state.player] : state.team >= 0 ? LK.teams[state.team] : "The league";
+  if (!n) setRich(el("playerLine"), ["No shots match these filters."]);
+  else {
+    const xp_ = state.metric === "xpts", diff = xp_ ? p - xp : made - xsum, verb = diff >= 0 ? "more" : "fewer";
+    setRich(el("playerLine"), [[who, "b"], ` took ${int(n)} shots${state.season >= 0 ? " in " + LK.seasons[state.season] : ""}. An average player would have made `,
+      [pct(xsum / n), "b"], " of them; ", who === "The league" ? "the league made " : "they made ", [pct(made / n), "b"], ". That's ",
+      [`${int(Math.abs(diff))} ${verb} ${xp_ ? "points" : "makes"}`, "b"], " than expected."]);
+  }
+  if (!n) { ["zoneChart", "hexChart", "scatterChart", "zoneDeltaChart"].forEach(id => emptyChart(id, "No shots match these filters.")); return; }
+  const zs = zoneStats(idx);
+  drawZoneMap("zoneChart", zs, state.mode);
+  el("zoneNote").textContent = state.mode === "diff" ? "Red = made more than expected, blue = fewer. Zones with under 15 shots are blank."
+    : state.mode === "fg" ? "How often shots from each zone actually went in. Darker = more often." : "How hard the shots from each zone were. Darker = easier.";
+  renderTable("zoneTable", zs.filter(q => q.att > 0), [
+    { label: "Zone", left: true, get: r => r.name }, { label: "Shots", get: r => r.att, fmt: int },
+    { label: "Expected", get: r => r.xfg, fmt: v => pct(v) }, { label: "Made", get: r => r.fg, fmt: v => pct(v) },
+    { label: "Beat the odds by", get: r => r.diff, fmt: v => pts(v) + " pts", signed: true }]);
+  renderHex(idx); renderScatter(idx); renderZoneDelta(zs, who);
+}
+function renderHex(idx) {
+  const S = 1.3, sq3 = Math.sqrt(3), bins = new Map(), s = SHOTS;
+  for (const i of idx) {
+    const x = s.x[i] / 10, y = s.y[i] / 10;
+    if (y > 40 || Math.abs(x) > 25.5) continue;
+    const q = (sq3 / 3 * x - y / 3) / S, r = (2 / 3 * y) / S, c = -q - r;
+    let rx = Math.round(q), ry = Math.round(c), rz = Math.round(r);
+    const dx = Math.abs(rx - q), dy = Math.abs(ry - c), dz = Math.abs(rz - r);
+    if (dx > dy && dx > dz) rx = -ry - rz; else if (dy <= dz) rz = -rx - ry;
+    const key = rx * 1000 + rz;
+    let b = bins.get(key); if (!b) { b = { q: rx, r: rz, n: 0, m: 0, x: 0 }; bins.set(key, b); }
+    b.n++; b.m += s.made[i]; b.x += s.xfg[i] / 1000;
+  }
+  const minN = Math.max(3, Math.round(idx.length * 0.0004));
+  const hs = [...bins.values()].filter(b => b.n >= minN);
+  if (!hs.length) return emptyChart("hexChart", "Too few shots for hot spots. See every shot below.");
+  const counts = hs.map(b => b.n).sort((a, b) => a - b), ref = counts[Math.floor(counts.length * 0.9)] || 1;
+  const pxPerFt = Math.max(6, (el("hexChart").clientWidth - 8) / 51);
+  const val = hs.map(b => state.mode === "xfg" ? b.x / b.n : state.mode === "fg" ? b.m / b.n : (b.m - b.x) / b.n), spec = colorSpec(state.mode, val);
+  plot("hexChart", [{ type: "scatter", mode: "markers", x: hs.map(b => S * sq3 * (b.q + b.r / 2)), y: hs.map(b => S * 1.5 * b.r),
+    marker: { symbol: "hexagon", size: hs.map(b => pxPerFt * S * sq3 * 1.05 * Math.max(0.3, Math.min(1, Math.sqrt(b.n / ref)))),
+      color: val, colorscale: spec.colorscale, cmin: spec.cmin, cmax: spec.cmax, colorbar: colorbar(spec), line: { width: 0 } },
+    customdata: hs.map(b => [b.n, b.x / b.n, b.m / b.n, (b.m - b.x) / b.n]),
+    hovertemplate: "%{customdata[0]:,} shots<br>expected %{customdata[1]:.1%} · made %{customdata[2]:.1%}<br>beat the odds by %{customdata[3]:+.1%}<extra></extra>" }],
+    courtLayout(), state.mode);
+}
+const SCATTER_MAX = 4000;
+function renderScatter(idx) {
+  if (idx.length > SCATTER_MAX) {
+    el("scatterNote").textContent = "Pick a player above to see every one of their shots.";
+    return emptyChart("scatterChart", `${int(idx.length)} shots is too many to draw one by one. Pick a player, or narrow the filters to ${int(SCATTER_MAX)} or fewer.`);
+  }
+  el("scatterNote").textContent = `${int(idx.length)} shots. Filled dot = make, hollow ring = miss. Color = how hard the shot was (darker = easier).`;
+  const s = SHOTS, spec = colorSpec("xfg", []);
+  const trace = (madeFlag, name, symbol) => {
+    const ii = idx.filter(i => s.made[i] === madeFlag);
+    return { type: "scattergl", mode: "markers", name, x: ii.map(i => s.x[i] / 10), y: ii.map(i => s.y[i] / 10),
+      marker: { symbol, size: 8, color: ii.map(i => s.xfg[i] / 1000), colorscale: spec.colorscale, cmin: spec.cmin, cmax: spec.cmax,
+        line: { width: madeFlag ? 0.5 : 1.8, color: madeFlag ? tok("--surface-1") : undefined }, colorbar: madeFlag ? colorbar(spec) : undefined, showscale: !!madeFlag },
+      customdata: ii.map(i => { const c = s.clock[i], per = c >> 10, sec = c & 1023;
+        return [LK.players[s.player[i]], LK.teams[s.opp[i]], dateStr(LK.dates[s.date[i]]), LK.actions[s.action[i]], clockStr(per, Math.floor(sec / 60), sec % 60), s.xfg[i] / 1000, s.dist[i]]; }),
+      hovertemplate: `<b>${name}</b> · %{customdata[5]:.0%} shot<br>%{customdata[0]} vs %{customdata[1]}<br>%{customdata[3]}, %{customdata[6]} ft<br>%{customdata[2]} · %{customdata[4]}<extra></extra>` };
+  };
+  plot("scatterChart", [trace(0, "Miss", "circle-open"), trace(1, "Make", "circle")],
+       courtLayout({ showlegend: true, legend: { orientation: "h", x: 0, y: 1.02, font: { size: 12, color: tok("--text-secondary") } } }));
+}
+function renderZoneDelta(all, who) {
+  const zs = all.filter(q => q.att >= MIN_ZONE).sort((a, b) => a.diff - b.diff);
+  el("zoneDeltaTitle").textContent = who === "The league" ? "Where the league beats the model" : `Where ${who} beats the model`;
+  if (!zs.length) return emptyChart("zoneDeltaChart", "No zone has 15 or more shots with these filters.");
+  const m = Math.max(0.02, ...zs.map(q => Math.abs(q.diff))) * 1.35;
+  plot("zoneDeltaChart", [{ type: "bar", orientation: "h", y: zs.map(q => q.name), x: zs.map(q => q.diff),
+    marker: { color: zs.map(q => q.diff >= 0 ? tok("--hot") : tok("--cold")), line: { width: 0 } },
+    text: zs.map(q => pts(q.diff)), textposition: "outside", cliponaxis: false, textfont: { size: 11.5, color: tok("--text-secondary") },
+    customdata: zs.map(q => [q.att, q.fg, q.xfg]),
+    hovertemplate: "<b>%{y}</b><br>%{customdata[0]:,} shots<br>expected %{customdata[2]:.1%} · made %{customdata[1]:.1%}<extra></extra>" }],
+    baseLayout({ height: 440, bargap: 0.35, margin: { l: 132, r: 20, t: 6, b: 40 },
+      xaxis: { ...AX(), range: [-m, m], tickformat: "+.0%", zeroline: true, zerolinewidth: 1.5, title: { text: "Made − expected" } },
+      yaxis: { ...baseLayout().yaxis, gridcolor: "rgba(0,0,0,0)" } }));
+}
+
+// ---------------- 4. moments ----------------
+function renderMoments() {
   const O = DATA.outliers, xp = state.metric === "xpts";
-  const cols = [{ label: "Player", left: true, get: r => r.PLAYER_NAME }, { label: "Team", left: true, get: r => `${r.team} vs ${r.opp}` },
-    { label: "Date", get: r => dateStr(String(r.GAME_DATE)) }, { label: "Clock", get: r => clockStr(r.PERIOD, r.MINUTES_REMAINING, r.SECONDS_REMAINING) },
-    { label: "Shot", left: true, get: r => r.ACTION_TYPE }, { label: "Dist", get: r => r.SHOT_DISTANCE + " ft" },
-    { label: "xFG%", get: r => r.xfg, fmt: v => pct(v) },
-    ...(xp ? [{ label: "Pts − xPts", get: r => r.pts_oe, fmt: v => sgn(v, 2), signed: true }] : [])];
-  document.getElementById("toughTitle").textContent = xp ? "Biggest single-shot gains" : "Toughest makes";
-  document.getElementById("toughNote").textContent = xp
-    ? "Makes that beat their expected points by the most (3 − xPts for a three, 2 − xPts for a two)." : "Lowest-probability shots that went in.";
-  document.getElementById("easyTitle").textContent = xp ? "Costliest single-shot misses" : "Easiest misses";
-  document.getElementById("easyNote").textContent = xp ? "Misses that threw away the most expected points." : "Highest-probability shots that didn't.";
+  const cols = [{ label: "Player", left: true, cls: "name", get: r => r.PLAYER_NAME }, { label: "Game", left: true, get: r => `${r.team} vs ${r.opp}` },
+    { label: "Date", left: true, get: r => dateStr(String(r.GAME_DATE)) }, { label: "Clock", get: r => clockStr(r.PERIOD, r.MINUTES_REMAINING, r.SECONDS_REMAINING) },
+    { label: "Shot", left: true, get: r => r.ACTION_TYPE }, { label: "Distance", get: r => r.SHOT_DISTANCE + " ft" },
+    xp ? { label: "Points vs expected", get: r => r.pts_oe, fmt: v => sgn(v, 2), signed: true } : { label: "Chance", get: r => r.xfg, fmt: v => pct(v, 0) }];
+  el("toughNote").textContent = xp ? "Makes that earned the most points beyond what the shot was worth on average." : "The least likely makes of the last two seasons.";
+  el("easyNote").textContent = xp ? "Misses that threw away the most expected points." : "The most likely shots that still rimmed out.";
   const tough = xp ? (state.heaves ? O.biggest_gains : O.biggest_gains_no_heaves) : (state.heaves ? O.toughest_makes : O.toughest_makes_no_heaves);
-  renderTable("toughTable", tough.slice(0, 15), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
-  renderTable("easyTable", (xp ? O.biggest_losses : O.easiest_misses).slice(0, 15), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+  renderTable("toughTable", tough.slice(0, 12), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+  renderTable("easyTable", (xp ? O.biggest_losses : O.easiest_misses).slice(0, 12), cols, { onRow: r => selectPlayer(r.PLAYER_NAME) });
+}
+
+// ---------------- 5. teams ----------------
+function renderTeams() {
+  const m = M_(), B = DATA.leaderboards.boards[state.scope];
+  const off = [...B.team_offense].sort((a, b) => b[m.total] - a[m.total]), def = [...B.team_defense].sort((a, b) => a[m.total] - b[m.total]);
+  setRich(el("teamInsight"), [[off[0].team, "b"], ` made the most of its shots: ${sgn(off[0][m.total], 0)} ${m.unit} beyond what an average team would get from the same looks. `,
+    [def[0].team, "b"], def[0][m.total] < 0
+      ? ` did the most to make opponents miss: opponents finished ${int(-def[0][m.total])} ${m.unit} below what their shots deserved.`
+      : ` allowed the least shot-making beyond expectations (${sgn(def[0][m.total], 0)} ${m.unit}).`]);
+  const cols = signed => [{ label: "Team", left: true, cls: "name", get: r => r.team }, { label: "Shots", get: r => r.attempts, fmt: int },
+    { label: m.qLabel, get: r => r[m.q], fmt: m.fmtAct }, { label: m.actLabel, get: r => r[m.act], fmt: m.fmtAct },
+    { label: m.totalLabel, get: r => r[m.total], fmt: v => sgn(v, 0), signed }, { label: "Skill or luck?", left: true, get: r => signed ? r[m.z] : -r[m.z], node: v => verdict(v) }];
+  renderTable("teamOff", off, cols(true));
+  renderTable("teamDef", def, cols(false));
+}
+
+// ---------------- 6. model ----------------
+function renderModel() {
+  const T = DATA.training, M = T.metrics, ov = M.online_overall, sp = T.split, cov = T.coverage;
+  const shotsIn = seasons => cov.filter(r => seasons.includes(r.season)).reduce((s, r) => s + r.shots, 0);
+  const step = (title, text) => { const d = document.createElement("div"); d.className = "step";
+    d.append(Object.assign(document.createElement("b"), { textContent: title }), Object.assign(document.createElement("span"), { textContent: text })); return d; };
+  el("steps").replaceChildren(
+    step("Learn from the past", `It studied ${int(shotsIn(sp.train))} shots from ${sp.train[0]} to ${sp.train[sp.train.length - 1]}: where they were taken, how, and whether they went in.`),
+    step("Check its work", `It used ${sp.stop} (${int(shotsIn([sp.stop]))} shots) to decide when to stop learning, so it wouldn't just memorise.`),
+    step("Predict, then learn", `For ${sp.online[0]} to ${sp.online[sp.online.length - 1]} it predicted each week's shots before seeing them, then learned from the results. Every number on this page is one of those predictions.`));
+  const fact = (big, what) => { const d = document.createElement("div"); d.className = "fact";
+    d.append(Object.assign(document.createElement("div"), { className: "big", textContent: big }), Object.assign(document.createElement("div"), { className: "what", textContent: what })); return d; };
+  const gain = (1 - ov.xfg.log_loss / ov.xfg_zone.log_loss) * 100;
+  el("report").replaceChildren(
+    fact(`±${(M.calibration.max_abs_gap * 100).toFixed(1)} pts`, "worst gap between what it predicted and what happened, across all probability levels"),
+    fact(`${gain.toFixed(1)}% less error`, "than guessing each zone's average make rate"),
+    fact(`${int(M.online_by_season ? Object.values(M.online_by_season).reduce((s, v) => s + v.n, 0) : 0)} shots`, "predicted before the result was known"));
+
+  // learning curve
+  const lc = [];
+  T.learning_curve.forEach((r, i, a) => { if (i && r.season !== a[i - 1].season) lc.push({ gap: true, chunk_min_date: r.chunk_min_date, season: r.season }); lc.push(r); });
+  const x = lc.map(r => { const d = String(r.chunk_min_date); return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`; });
+  const series = [["xfg_log_loss_roll", "Updated weekly", "--series-1"], ["xfg_frozen_log_loss_roll", "Frozen copy", "--series-2"], ["xfg_zone_log_loss_roll", "Zone average", "--series-3"]];
+  const allY = lc.flatMap(r => series.map(([k]) => r[k])).filter(v => v != null), last = lc[lc.length - 1];
+  const endAnn = spreadLabels(series.map(([k, name]) => ({ x: x[x.length - 1], y: last[k], xanchor: "left", xshift: 6, text: name, showarrow: false,
+    font: { size: 12, color: tok("--text-secondary") } })), Math.min(...allY), Math.max(...allY));
+  const firstOf = {}; lc.forEach((r, i) => { if (!r.gap && !(r.season in firstOf)) firstOf[r.season] = x[i]; });
+  plot("curveChart", series.map(([k, name, c]) => ({ type: "scatter", mode: "lines", name, x, y: lc.map(r => r[k]), line: { color: tok(c), width: 2 },
+      connectgaps: false, hovertemplate: `${name} %{y:.4f}<extra></extra>` })),
+    baseLayout({ hovermode: "x unified", showlegend: true, height: 330, margin: { l: 56, r: 110, t: 24, b: 40 }, legend: LEGEND_BELOW(),
+      annotations: [...endAnn, ...Object.entries(firstOf).map(([s, d]) => ({ x: d, yref: "paper", y: 1, xanchor: "left", yanchor: "bottom", text: s, showarrow: false, font: { size: 11, color: tok("--text-muted") } }))],
+      shapes: Object.values(firstOf).slice(1).map(d => ({ type: "line", x0: d, x1: d, yref: "paper", y0: 0, y1: 1, line: { color: tok("--grid"), width: 1 } })),
+      xaxis: { ...AX(), range: [x[0], x[x.length - 1]] },
+      yaxis: { ...baseLayout().yaxis, title: { text: "Prediction error" }, tickformat: ".3f" } }));
+  renderTable("seasonMetricsTable", Object.entries(M.online_by_season).map(([s, v]) => ({ s, ...v })), [
+    { label: "Season", left: true, get: r => r.s + (DATA.meta.seasons.includes(r.s) ? " (on this page)" : "") },
+    { label: "Shots", get: r => r.n, fmt: int }, { label: "Made", get: r => r.actual_fg, fmt: v => pct(v) }, { label: "Expected", get: r => r.mean_xfg, fmt: v => pct(v) },
+    { label: "Error: weekly", get: r => r.xfg.log_loss, fmt: v => v.toFixed(4) }, { label: "frozen", get: r => r.xfg_frozen.log_loss, fmt: v => v.toFixed(4) },
+    { label: "zone avg", get: r => r.xfg_zone.log_loss, fmt: v => v.toFixed(4) }, { label: "AUC", get: r => r.xfg.auc, fmt: v => v.toFixed(3) }]);
+
+  // calibration
+  const cal = M.calibration, calRows = cal.predicted_mean_by_bin.map((p, i) => ({ i: i + 1, p, a: cal.actual_frac_by_bin[i] }));
+  const lo = Math.min(...cal.predicted_mean_by_bin, ...cal.actual_frac_by_bin) - 0.03, hi = Math.max(...cal.predicted_mean_by_bin, ...cal.actual_frac_by_bin) + 0.03;
+  plot("calChart", [
+    { type: "scatter", mode: "lines", x: [lo, hi], y: [lo, hi], line: { color: tok("--axis"), width: 1.5 }, hoverinfo: "skip" },
+    { type: "scatter", mode: "lines+markers", x: calRows.map(r => r.p), y: calRows.map(r => r.a), line: { color: tok("--series-1"), width: 2 },
+      marker: { size: 10, color: tok("--series-1"), line: { width: 2, color: tok("--surface-1") } }, hovertemplate: "said %{x:.1%}<br>went in %{y:.1%}<extra></extra>" }],
+    baseLayout({ height: 330, margin: { l: 56, r: 12, t: 10, b: 48 },
+      xaxis: { ...AX(), tickformat: ".0%", title: { text: "What the model said" }, range: [lo, hi] },
+      yaxis: { ...baseLayout().yaxis, tickformat: ".0%", title: { text: "How often they went in" }, range: [lo, hi] } }));
+  renderTable("calTable", calRows, [{ label: "Group", left: true, get: r => r.i }, { label: "Model said", get: r => r.p, fmt: v => pct(v) },
+    { label: "Went in", get: r => r.a, fmt: v => pct(v) }, { label: "Gap", get: r => r.a - r.p, fmt: v => pts(v) + " pts", signed: true }]);
+
+  // importance
+  const nice = f => ({ action_dunk: "Dunk?", action_jump: "Jump shot?", loc_dist_ft: "Distance (x/y)", shot_distance: "Distance", is_cutting: "Cutting?",
+    is_running: "On the run?", action_putback: "Putback?", is_driving: "Driving?", action_layup: "Layup?", last_24s: "Last 24 s of period",
+    last_3s: "Last 3 s of period", is_alley_oop: "Alley-oop?", action_pullup: "Pull-up?", league_zone_fg: "League's recent rate in zone",
+    opp_def_fg: "Opponent's defense in zone", opp_def_delta: "Opponent defense vs league" }[f]
+    || f.replace(/^action_/, "").replace(/^zone_/, "zone: ").replace(/^area_/, "area: ").replace(/_/g, " "));
+  const imp = T.feature_importance.slice(0, 12).reverse();
+  plot("impChart", [{ type: "bar", orientation: "h", y: imp.map(r => nice(r.feature)), x: imp.map(r => r.gain), marker: { color: tok("--series-1"), line: { width: 0 } },
+    hovertemplate: "%{y}<br>importance %{x:,.0f}<extra></extra>" }],
+    baseLayout({ height: 360, bargap: 0.3, margin: { l: 170, r: 12, t: 6, b: 40 }, yaxis: { ...baseLayout().yaxis, gridcolor: "rgba(0,0,0,0)" },
+      xaxis: { ...AX(), title: { text: "Importance (gain)" } } }));
+  renderTable("impTable", T.feature_importance, [{ label: "Input", left: true, get: r => nice(r.feature) }, { label: "Importance", get: r => r.gain, fmt: v => v.toFixed(1) }]);
+
+  // coverage
+  const roles = [["train", "Learned from", "--series-1"], ["early-stop", "Checked on", "--series-2"], ["walk-forward", "Predicted week by week", "--series-3"]];
+  plot("coverageChart", roles.map(([key, name, c]) => { const rs = cov.filter(r => r.role === key);
+    return { type: "bar", name, x: rs.map(r => r.season), y: rs.map(r => r.shots), marker: { color: tok(c), line: { width: 0 } },
+      customdata: rs.map(r => [r.games, r.fg_pct, r.on_dashboard ? "shown on this page" : ""]),
+      hovertemplate: `<b>%{x}</b> · ${name}<br>%{y:,} shots · %{customdata[0]} games<br>%{customdata[2]}<extra></extra>` }; }),
+    baseLayout({ barmode: "overlay", bargap: 0.25, showlegend: true, height: 330, legend: LEGEND_BELOW(-0.32), margin: { l: 56, r: 10, t: 24, b: 50 },
+      // one bracket over the seasons shown on this page (numeric positions on the category axis)
+      ...(() => { const ix = cov.map((r, i) => r.on_dashboard ? i : -1).filter(i => i >= 0); if (!ix.length) return {};
+        const top = Math.max(...cov.map(r => r.shots)) * 1.06, a = ix[0] - 0.4, b = ix[ix.length - 1] + 0.4, line = { color: tok("--text-muted"), width: 1 };
+        return { shapes: [{ type: "line", x0: a, x1: b, y0: top, y1: top, line }, { type: "line", x0: a, x1: a, y0: top, y1: top * 0.97, line }, { type: "line", x0: b, x1: b, y0: top, y1: top * 0.97, line }],
+                 annotations: [{ x: (a + b) / 2, y: top, yanchor: "bottom", text: "on this page", showarrow: false, font: { size: 11, color: tok("--text-secondary") } }] }; })(),
+      yaxis: { ...baseLayout().yaxis, tickformat: ".2s", rangemode: "tozero" },
+      xaxis: { ...AX(), type: "category", gridcolor: "rgba(0,0,0,0)", ...seasonTicks(cov.map(r => r.season)) } }));
+  renderTable("coverageTable", cov, [{ label: "Season", left: true, get: r => r.season }, { label: "Role", left: true, get: r => r.role },
+    { label: "Shots", get: r => r.shots, fmt: int }, { label: "Games", get: r => r.games, fmt: int }, { label: "Made", get: r => r.fg_pct, fmt: v => pct(v) },
+    { label: "Threes", get: r => r.three_rate, fmt: v => pct(v) }, { label: "Dropped (no location)", get: r => r.dropped_no_location, fmt: int }]);
+  const trend = (id, key, label) => plot(id, [{ type: "scatter", mode: "lines+markers", x: cov.map(r => r.season), y: cov.map(r => r[key]),
+    line: { color: tok("--series-1"), width: 2.5 }, marker: { size: 8, color: tok("--series-1"), line: { width: 2, color: tok("--surface-1") } },
+    hovertemplate: `<b>%{x}</b><br>${label} %{y:.1%}<extra></extra>` }],
+    baseLayout({ margin: { l: 52, r: 10, t: 10, b: 50 }, xaxis: { ...AX(), type: "category", gridcolor: "rgba(0,0,0,0)", ...seasonTicks(cov.map(r => r.season)) },
+      yaxis: { ...baseLayout().yaxis, tickformat: ".1%" } }));
+  trend("fgTrendChart", "fg_pct", "make rate"); trend("threeTrendChart", "three_rate", "threes");
+}
+
+// ---------------- hero ----------------
+function renderHero() {
+  const m = DATA.meta, B = DATA.leaderboards.boards.All, M = DATA.training.metrics;
+  el("kicker").textContent = `NBA regular seasons ${seasonsText(m.seasons)}`;
+  if (m.synthetic) el("kicker").append(Object.assign(document.createElement("span"), { className: "badge", textContent: "synthetic test data" }));
+  const top = [...B.players].filter(r => r.attempts >= 300).sort((a, b) => b.makes_oe - a.makes_oe)[0];
+  const f = (big, what, onClick) => { const d = document.createElement(onClick ? "button" : "div"); d.className = "fact" + (onClick ? " link" : "");
+    if (onClick) { d.type = "button"; d.style.cssText = "text-align:left;font:inherit;color:inherit"; d.addEventListener("click", onClick); }
+    d.append(Object.assign(document.createElement("div"), { className: "big", textContent: big }), Object.assign(document.createElement("div"), { className: "what", textContent: what })); return d; };
+  el("heroFacts").replaceChildren(
+    f(int(DATA.shots.n), "shots, each with its own expected make rate"),
+    f(top ? `${top.PLAYER_NAME}` : "–", top ? `made ${int(top.makes_oe)} more shots than an average player would have from the same spots. Tap to see them.` : "", top ? () => selectPlayer(top.PLAYER_NAME) : null),
+    f(`${(M.calibration.max_abs_gap * 100).toFixed(1)} pts`, "the most the model's percentages ever miss by. When it says 40%, it means it."));
+  el("footer").textContent = `Built ${m.generated} from stats.nba.com shot charts. xFG% ignores who is shooting, and every value was predicted before the model learned from that shot.`;
 }
 
 // ---------------- controls ----------------
-function fillSelect(id, items, allLabel) {
-  const el = document.getElementById(id);
-  el.replaceChildren(new Option(allLabel, "-1"), ...items.map((t, i) => new Option(t, String(i))));
+function fillSelect(id, items, allLabel) { el(id).replaceChildren(new Option(allLabel, "-1"), ...items.map((t, i) => new Option(t, String(i)))); }
+function setMetric(next) {
+  if (next === state.metric) return;
+  state.sortKey = (next === "xpts" ? SORT_TWIN : SORT_TWIN_BACK)[state.sortKey] || state.sortKey;
+  state.metric = next;
+  document.querySelectorAll("#bMetric button").forEach(o => o.setAttribute("aria-pressed", String(o.dataset.metric === next)));
+  renderBoards(); renderMoments(); renderTeams(); renderExplore();
 }
 function initControls() {
   fillSelect("fSeason", LK.seasons, "Both seasons");
   fillSelect("fTeam", LK.teams, "All teams");
-  fillSelect("fOpp", LK.teams, "All opponents");
-  fillSelect("fFamily", LK.families, "All shot types");
-  document.getElementById("playerList").replaceChildren(...LK.players.map(p => new Option(p)));
-  const bind = (id, key) => document.getElementById(id).addEventListener("change", e => { state[key] = +e.target.value; renderMaps(); });
+  fillSelect("fOpp", LK.teams, "Any opponent");
+  el("fFamily").replaceChildren(new Option("All shot types", "-1"), ...LK.families.map((f, i) => new Option(FAMILY_NAMES[f] || f, String(i))));
+  el("playerList").replaceChildren(...LK.players.map(p => new Option(p)));
+  const bind = (id, key) => el(id).addEventListener("change", e => { state[key] = +e.target.value; renderExplore(); });
   bind("fSeason", "season"); bind("fTeam", "team"); bind("fOpp", "opp"); bind("fFamily", "family");
-  document.getElementById("fResult").addEventListener("change", e => { state.result = e.target.value; renderMaps(); });
-  const fp = document.getElementById("fPlayer");
-  fp.addEventListener("change", () => { const i = playerIndex.get(fp.value); state.player = i == null ? -1 : i; if (i == null) fp.value = ""; renderMaps(); });
-  document.getElementById("fPlayerClear").addEventListener("click", () => { fp.value = ""; state.player = -1; renderMaps(); });
+  el("fResult").addEventListener("change", e => { state.result = e.target.value; renderExplore(); });
+  const fp = el("fPlayer");
+  fp.addEventListener("change", () => { const i = playerIndex.get(fp.value); state.player = i == null ? -1 : i; if (i == null) fp.value = ""; renderExplore(); });
+  el("fPlayerClear").addEventListener("click", () => { fp.value = ""; state.player = -1; state.team = -1; el("fTeam").value = "-1"; renderExplore(); });
   document.querySelectorAll("#fMode button").forEach(b => b.addEventListener("click", () => {
-    state.mode = b.dataset.mode; document.querySelectorAll("#fMode button").forEach(o => o.setAttribute("aria-pressed", String(o === b))); renderMaps(); }));
+    state.mode = b.dataset.mode; document.querySelectorAll("#fMode button").forEach(o => o.setAttribute("aria-pressed", String(o === b))); renderExplore(); }));
 
-  document.querySelectorAll("#bMetric button").forEach(b => b.addEventListener("click", () => {
-    const next = b.dataset.metric; if (next === state.metric) return;
-    state.sortKey = (next === "xpts" ? SORT_TWIN : SORT_TWIN_BACK)[state.sortKey] || state.sortKey;
-    state.metric = next;
-    document.querySelectorAll("#bMetric button").forEach(o => o.setAttribute("aria-pressed", String(o === b)));
-    renderBoards(); renderOutliers(); }));
-  const scope = document.getElementById("bScope");
-  scope.replaceChildren(...DATA.leaderboards.scopes.map(s => new Option(s === "All" ? "Both seasons" : s, s)));
-  scope.addEventListener("change", e => { state.scope = e.target.value; renderBoards(); });
-  const zg = document.getElementById("bZone");
-  zg.replaceChildren(...["All zones", ...DATA.training.zone_groups].map(z => new Option(z, z)));
-  zg.addEventListener("change", e => { state.zoneGroup = e.target.value; state.minAtt = e.target.value === "All zones" ? Math.max(state.minAtt, 100) : Math.min(state.minAtt, 150);
-    document.getElementById("bMin").value = state.minAtt; renderBoards(); });
-  const mn = document.getElementById("bMin"); mn.value = state.minAtt;
-  mn.addEventListener("input", e => { state.minAtt = +e.target.value; renderBoards(); });
-  document.getElementById("boardMore").addEventListener("click", () => { state.showAll = !state.showAll; renderBoards(); });
-  document.getElementById("heaves").addEventListener("change", e => { state.heaves = e.target.checked; renderOutliers(); });
+  // suggested players: top shot-makers plus the highest-volume shooters
+  const B = DATA.leaderboards.boards.All.players.filter(r => r.attempts >= 300);
+  const picks = [...new Set([...[...B].sort((a, b) => b.makes_oe - a.makes_oe).slice(0, 3), ...[...B].sort((a, b) => b.attempts - a.attempts).slice(0, 5)].map(r => r.PLAYER_NAME))].slice(0, 6);
+  el("suggest").append(...picks.map(name => { const c = document.createElement("button"); c.type = "button"; c.className = "chip"; c.textContent = name;
+    c.setAttribute("aria-pressed", "false"); c.addEventListener("click", () => { fp.value = name; state.player = playerIndex.get(name); state.team = -1; el("fTeam").value = "-1"; renderExplore(); }); return c; }));
+
+  el("bScope").replaceChildren(...DATA.leaderboards.scopes.map(s => new Option(s === "All" ? "Both seasons" : s, s)));
+  el("bScope").addEventListener("change", e => { state.scope = e.target.value; renderBoards(); renderTeams(); });
+  el("bZone").replaceChildren(...["All zones", ...DATA.training.zone_groups].map(z => new Option(z === "All zones" ? "Anywhere" : z, z)));
+  el("bZone").addEventListener("change", e => { state.zoneGroup = e.target.value;
+    state.minAtt = e.target.value === "All zones" ? Math.max(state.minAtt, 100) : Math.min(state.minAtt, 150); el("bMin").value = state.minAtt; renderBoards(); });
+  el("bMin").value = state.minAtt;
+  el("bMin").addEventListener("input", e => { state.minAtt = +e.target.value; renderBoards(); });
+  el("boardMore").addEventListener("click", () => { state.showAll = !state.showAll; renderBoards(); });
+  el("heaves").addEventListener("change", e => { state.heaves = e.target.checked; renderMoments(); });
+  document.querySelectorAll("#bMetric button").forEach(b => b.addEventListener("click", () => setMetric(b.dataset.metric)));
 
   // theme: system -> light -> dark
-  const btn = document.getElementById("themeBtn");
+  const btn = el("themeBtn");
   let pref = "system"; try { pref = localStorage.getItem("xfg-theme") || "system"; } catch (e) {}
-  const q = new URLSearchParams(location.search).get("theme");   // ?theme=light|dark overrides
+  const q = new URLSearchParams(location.search).get("theme");
   if (["light", "dark", "system"].includes(q)) pref = q;
-  const apply = () => { if (pref === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = pref;
-    btn.textContent = "Theme: " + pref; };
+  const apply = () => { if (pref === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = pref; btn.textContent = "Theme: " + pref; };
   apply();
-  btn.addEventListener("click", () => { pref = { system: "light", light: "dark", dark: "system" }[pref];
-    try { localStorage.setItem("xfg-theme", pref); } catch (e) {} apply(); renderAll(); });
+  btn.addEventListener("click", () => { pref = { system: "light", light: "dark", dark: "system" }[pref]; try { localStorage.setItem("xfg-theme", pref); } catch (e) {} apply(); renderAll(); });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (pref === "system") renderAll(); });
   let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => renderHex(filteredIdx()), 200); });
-}
 
+  // highlight the chapter in view
+  const links = [...document.querySelectorAll("#chapterNav a")];
+  const io = new IntersectionObserver(entries => entries.forEach(e => { if (e.isIntersecting)
+    links.forEach(a => a.setAttribute("aria-current", String(a.getAttribute("href") === "#" + e.target.id))); }), { rootMargin: "-30% 0px -60% 0px" });
+  document.querySelectorAll("section.chapter").forEach(s => io.observe(s));
+}
 function applyUrlFilters() {   // ?player=Name&metric=xpts deep links
   const q = new URLSearchParams(location.search);
-  if (q.get("metric") === "xpts") document.querySelector('#bMetric button[data-metric="xpts"]').click();
-  const name = q.get("player");
-  const i = name == null ? undefined : playerIndex.get(name);
-  if (i != null) { state.player = i; document.getElementById("fPlayer").value = name; }
+  if (q.get("metric") === "xpts") setMetric("xpts");
+  const i = q.get("player") == null ? undefined : playerIndex.get(q.get("player"));
+  if (i != null) { state.player = i; el("fPlayer").value = q.get("player"); }
 }
-
-function renderAll() { renderTraining(); renderMaps(); renderBoards(); renderOutliers(); }
+function renderAll() { renderHero(); renderGoodShot(); renderBoards(); renderExplore(); renderMoments(); renderTeams(); renderModel(); }
 
 (async function main() {
-  const m = DATA.meta;
-  document.getElementById("subtitle").textContent =
-    `Held-out walk-forward predictions · ${m.seasons.join(" & ")} regular seasons`;
-  if (m.synthetic) document.getElementById("subtitle").append(Object.assign(document.createElement("span"), { className: "badge warn", textContent: "synthetic data" }));
-  document.getElementById("footer").textContent = `Generated ${m.generated}. Data: stats.nba.com shot charts. xFG% is shooter-blind and each value was predicted before the model trained on that shot.`;
   try {
     await decodeShots();
     initControls();
     applyUrlFilters();
     renderAll();
   } catch (e) { CHECK.errors.push("init: " + e.message); }
-  document.getElementById("selfcheck").textContent = JSON.stringify(CHECK);
+  el("selfcheck").textContent = JSON.stringify(CHECK);
   document.body.dataset.ready = "1";
 })();
 </script>
